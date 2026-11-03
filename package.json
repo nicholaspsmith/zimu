@@ -1,0 +1,22 @@
+{
+  "name": "zimu",
+  "version": "0.1.0",
+  "description": "Mandarin language-learning subtitles for the Jellyfin web player",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node --test test/*.test.js",
+    "package": "node scripts/package.js",
+    "e2e": "node test/e2e/run.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "pinyin-pro": "^3.29.5",
+    "puppeteer": "^24.43.1"
+  },
+  "private": true
+}

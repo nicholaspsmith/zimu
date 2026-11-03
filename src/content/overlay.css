@@ -1,0 +1,201 @@
+/* Zimu overlay. Everything is scoped under #zimu-root. */
+
+html.zimu-hide-native .videoSubtitles,
+html.zimu-hide-native .videoSecondarySubtitles,
+html.zimu-hide-native .libassjs-canvas-parent,
+html.zimu-hide-native .JASSUB {
+  display: none !important;
+}
+html.zimu-hide-native video::cue {
+  color: transparent !important;
+  background: transparent !important;
+  text-shadow: none !important;
+}
+
+#zimu-root {
+  --zimu-size: 34px;
+  --zimu-bottom: 12vh;
+  --zimu-lift: 0px;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--zimu-bottom) + var(--zimu-lift));
+  z-index: 2147483000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  color: #fff;
+  transition: bottom 0.2s ease;
+  -webkit-font-smoothing: antialiased;
+}
+#zimu-root.zimu-hidden { display: none; }
+#zimu-root * { box-sizing: border-box; }
+
+/* toolbar: appears when hovering the subtitles */
+.zimu-toolbar {
+  pointer-events: auto;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 6px;
+  padding: 3px 6px;
+  border-radius: 8px;
+  background: rgba(20, 20, 24, 0.72);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+#zimu-root:hover .zimu-toolbar,
+.zimu-toolbar:has(.zimu-status:not(:empty)) { opacity: 1; }
+.zimu-status { font-size: 13px; color: #cfd3da; padding: 0 6px; white-space: nowrap; }
+
+.zimu-btn {
+  all: unset;
+  cursor: pointer;
+  font: 13px/1 system-ui, sans-serif;
+  color: #e8eaee;
+  padding: 5px 8px;
+  border-radius: 6px;
+}
+.zimu-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.zimu-btn.zimu-on { background: #2f7d5b; color: #fff; }
+
+/* the subtitle block */
+.zimu-lines {
+  pointer-events: auto;
+  max-width: min(92vw, 1400px);
+  padding: 6px 14px 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.zimu-lines:has(.zimu-zh:empty):has(.zimu-en:empty) { display: none; }
+.zimu-lines.zimu-past { opacity: 0.55; }
+
+.zimu-zh { font-size: var(--zimu-size); line-height: 1.25; }
+.zimu-row { margin: 2px 0; }
+.zimu-w {
+  display: inline-block;
+  cursor: pointer;
+  padding: 0 1px;
+  border-radius: 4px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.zimu-w:hover { background: rgba(255, 255, 255, 0.16); }
+.zimu-w.zimu-sel { background: rgba(80, 160, 255, 0.45); }
+.zimu-w.zimu-saved { box-shadow: inset 0 -2px 0 #f2c94c; }
+.zimu-w.zimu-py-only { font-size: 0.62em; margin-left: 0.3em; }
+.zimu-row > .zimu-w.zimu-py-only:first-child { margin-left: 0; }
+.zimu-row .zimu-p { font-size: inherit; }
+.zimu-p { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); }
+.zimu-zh ruby { ruby-position: over; }
+.zimu-zh rt {
+  font-size: 0.42em;
+  color: #e9e3c9;
+  font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  letter-spacing: 0;
+  padding-bottom: 1px;
+}
+
+.zimu-en {
+  font: calc(var(--zimu-size) * 0.6) / 1.3 system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  color: #d9dde4;
+  margin-top: 2px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.zimu-en:empty { display: none; }
+
+/* tone colours (Pleco-like) */
+.zimu-tones .zimu-t1 { color: #ff6b6b; }
+.zimu-tones .zimu-t2 { color: #ffc24b; }
+.zimu-tones .zimu-t3 { color: #69db7c; }
+.zimu-tones .zimu-t4 { color: #6cb2ff; }
+.zimu-tones .zimu-t5 { color: #c8c8c8; }
+.zimu-tones .zimu-zh rt { color: inherit; }
+
+/* popups and the settings panel */
+.zimu-popup,
+.zimu-panel {
+  pointer-events: auto;
+  position: absolute;
+  min-width: 260px;
+  max-width: min(460px, 92vw);
+  max-height: 60vh;
+  overflow: auto;
+  padding: 14px 16px 12px;
+  border-radius: 12px;
+  background: rgba(24, 25, 30, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  font: 14px/1.45 system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  color: #e8eaee;
+  text-align: left;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.zimu-panel { bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
+.zimu-x {
+  all: unset;
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  cursor: pointer;
+  font-size: 20px;
+  color: #9aa0aa;
+}
+.zimu-x:hover { color: #fff; }
+.zimu-head { display: flex; align-items: baseline; gap: 10px; padding-right: 20px; flex-wrap: wrap; }
+.zimu-big { font: 600 30px/1.2 "PingFang SC", "Hiragino Sans GB", sans-serif; }
+.zimu-head-py { font-size: 17px; color: #f2d98c; }
+.zimu-muted { color: #9aa0aa; }
+.zimu-entries { margin-top: 6px; }
+.zimu-entry { margin: 6px 0; }
+.zimu-entry-py { font-weight: 600; color: #f2d98c; }
+.zimu-entry ol { margin: 2px 0 0; padding-left: 22px; }
+.zimu-chars, .zimu-breakdown {
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 6px;
+}
+.zimu-char, .zimu-bd-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.zimu-char:hover, .zimu-bd-row:hover { background: rgba(255, 255, 255, 0.07); }
+.zimu-char-h, .zimu-bd-h { font-size: 20px; font-family: "PingFang SC", sans-serif; }
+.zimu-char-py, .zimu-bd-py { color: #f2d98c; }
+.zimu-translation { margin: 8px 0 2px; font-size: 15px; }
+.zimu-actions { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+.zimu-save {
+  all: unset;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #3a3f4b;
+  font-weight: 600;
+}
+.zimu-save:hover { background: #4a5060; }
+
+.zimu-panel-title { font-weight: 700; margin: 8px 0 4px; color: #fff; }
+.zimu-panel-title:first-child { margin-top: 0; }
+.zimu-row-flex { display: flex; gap: 14px; }
+.zimu-check { display: flex; gap: 6px; align-items: center; margin: 3px 0; cursor: pointer; }
+.zimu-field, .zimu-range { display: grid; grid-template-columns: 70px 1fr; gap: 8px; align-items: center; margin: 4px 0; }
+.zimu-field select {
+  background: #2b2e36;
+  color: #e8eaee;
+  border: 1px solid #444a56;
+  border-radius: 6px;
+  padding: 3px 4px;
+  max-width: 100%;
+}

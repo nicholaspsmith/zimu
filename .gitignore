@@ -1,0 +1,7 @@
+node_modules/
+dist/
+e2e-out/
+data/
+src/data/
+src/vendor/
+.DS_Store

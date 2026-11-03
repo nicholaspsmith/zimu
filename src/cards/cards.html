@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zimu flashcards</title>
+  <link rel="icon" href="../icons/icon48.png">
+  <link rel="stylesheet" href="cards.css">
+</head>
+<body>
+  <header>
+    <h1><img src="../icons/icon48.png" alt=""> Zimu flashcards</h1>
+    <nav>
+      <button id="tab-review" class="tab">Review <span id="due-count" class="pill">0</span></button>
+      <button id="tab-list" class="tab">All cards <span id="total-count" class="pill">0</span></button>
+    </nav>
+    <div class="spacer"></div>
+    <button id="export-anki" title="Tab-separated file Anki can import">Export for Anki</button>
+    <button id="export-json">Back up</button>
+    <label class="button">Restore<input id="import-json" type="file" accept=".json,application/json" hidden></label>
+  </header>
+
+  <main>
+    <section id="review" hidden>
+      <div id="review-empty" class="empty" hidden>
+        <p>Nothing due right now.</p>
+        <p class="muted">Save words while watching (click a word ▸ ☆ Save) and they show up here.</p>
+      </div>
+      <div id="review-card" class="card" hidden>
+        <div class="front">
+          <div id="r-hanzi" class="hanzi"></div>
+          <div id="r-sentence" class="sentence"></div>
+        </div>
+        <div id="r-back" class="back" hidden>
+          <div id="r-pinyin" class="pinyin"></div>
+          <div id="r-english" class="english"></div>
+          <div id="r-sentence-py" class="sentence-py"></div>
+          <div id="r-sentence-en" class="sentence-en"></div>
+        </div>
+        <div class="source">
+          <button id="r-play" class="play" title="Play this moment in Jellyfin (P)">▶ Play</button>
+          <span id="r-source" class="muted"></span>
+        </div>
+        <div class="grade">
+          <button id="r-show" class="primary">Show answer <kbd>space</kbd></button>
+          <div id="r-grades" hidden>
+            <button data-grade="again" class="again">Again <kbd>1</kbd></button>
+            <button data-grade="good" class="good">Good <kbd>2</kbd></button>
+            <button data-grade="easy" class="easy">Easy <kbd>3</kbd></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="list" hidden>
+      <input id="search" type="search" placeholder="Search hanzi, pinyin or English">
+      <table>
+        <thead><tr><th>Hanzi</th><th>Pinyin</th><th>English</th><th>From</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p id="list-empty" class="empty" hidden>No cards yet.</p>
+    </section>
+  </main>
+  <div id="toast" hidden></div>
+
+  <script src="../lib/core.js"></script>
+  <script src="../lib/store.js"></script>
+  <script src="cards.js"></script>
+</body>
+</html>

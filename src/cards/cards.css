@@ -1,0 +1,127 @@
+:root {
+  --bg: #f6f5f2;
+  --panel: #ffffff;
+  --text: #1d1f23;
+  --muted: #6b7079;
+  --line: #e3e1db;
+  --accent: #c42b2b;
+  --pinyin: #9a6b00;
+  --mark: #ffe7a3;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15161a;
+    --panel: #1e2026;
+    --text: #e8eaee;
+    --muted: #9aa0aa;
+    --line: #2e313a;
+    --accent: #e0574f;
+    --pinyin: #f2d98c;
+    --mark: #5a4710;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Helvetica Neue", sans-serif;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+}
+h1 { font-size: 18px; margin: 0 12px 0 0; display: flex; align-items: center; gap: 8px; }
+h1 img { width: 24px; height: 24px; }
+nav { display: flex; gap: 4px; }
+.spacer { flex: 1; }
+button, .button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+button:hover, .button:hover { border-color: var(--muted); }
+.tab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+.pill { font-size: 12px; padding: 0 6px; border-radius: 99px; background: var(--line); color: var(--text); margin-left: 4px; }
+.tab.active .pill { background: var(--accent); color: #fff; }
+main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 60px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.empty { text-align: center; color: var(--muted); margin-top: 60px; font-size: 17px; }
+
+/* review card */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 32px 28px 24px;
+  text-align: center;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.hanzi { font: 600 64px/1.2 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif; }
+.sentence { font: 24px/1.5 "PingFang SC", "Hiragino Sans GB", sans-serif; margin-top: 14px; }
+.sentence mark { background: var(--mark); color: inherit; border-radius: 4px; padding: 0 2px; }
+.back { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--line); }
+.pinyin { color: var(--pinyin); font-size: 24px; font-weight: 600; }
+td.pinyin { font-size: 15px; }
+.english { font-size: 18px; margin-top: 4px; }
+.sentence-py { color: var(--pinyin); margin-top: 14px; }
+.sentence-en { color: var(--muted); }
+.source { margin-top: 18px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.play { border-color: var(--accent); color: var(--accent); }
+.grade { margin-top: 20px; }
+.grade #r-grades { display: flex; gap: 10px; justify-content: center; }
+.grade #r-grades[hidden] { display: none; }
+.primary { background: var(--text); color: var(--bg); border-color: var(--text); padding: 10px 22px; }
+.again { border-color: #c0392b; }
+.good { border-color: #2f7d5b; }
+.easy { border-color: #2c6db5; }
+kbd { font: 11px ui-monospace, monospace; opacity: 0.6; margin-left: 4px; }
+
+/* list */
+#search {
+  width: 100%;
+  font: inherit;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: inherit;
+  margin-bottom: 14px;
+}
+table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 12px; overflow: hidden; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 13px; color: var(--muted); font-weight: 600; }
+.hanzi-cell { font: 22px/1.3 "PingFang SC", "Hiragino Sans GB", sans-serif; white-space: nowrap; }
+td.from .play { font-size: 13px; padding: 3px 8px; text-align: left; }
+.ghost { border-color: transparent; }
+
+#toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: var(--bg);
+  padding: 9px 16px;
+  border-radius: 10px;
+}
+
+@media (max-width: 640px) {
+  header { padding: 10px 16px; }
+  .hanzi { font-size: 48px; }
+  th:nth-child(3), td:nth-child(3) { display: none; }
+}

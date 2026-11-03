@@ -95,3 +95,18 @@ test('real CC-CEDICT: lookup and segmentation', () => {
     .filter((t) => t.han).map((t) => t.text);
   assert.deepEqual(seg, ['我', '觉得', '他', '还', '没', '睡着']);
 });
+
+test('manifest runs on every Jellyfin address in use', () => {
+  const m = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'manifest.json'), 'utf8'));
+  const servers = ['https://jellyfin.example.com/web/', 'http://jellyfin-host:8096/web/'];
+  const covers = (patterns, url) => patterns.some((p) => {
+    const [, scheme, host] = /^(\*|https?):\/\/([^/]+)\//.exec(p);
+    const u = new URL(url);
+    return (scheme === '*' || scheme + ':' === u.protocol) && host === u.hostname;
+  });
+  for (const url of servers) {
+    assert.ok(covers(m.content_scripts[0].matches, url), `content script misses ${url}`);
+    assert.ok(covers(m.host_permissions, url), `host permission misses ${url}`);
+    assert.ok(covers(m.web_accessible_resources[0].matches, url), `dictionary not accessible on ${url}`);
+  }
+});

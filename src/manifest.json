@@ -2,16 +2,30 @@
   "manifest_version": 3,
   "name": "Zimu — Mandarin subtitles for Jellyfin",
   "short_name": "Zimu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Interactive Chinese subtitles in the Jellyfin web player: hanzi, pinyin, English, click-to-define, and flashcards that link back to the moment.",
-  "icons": { "48": "icons/icon48.png", "128": "icons/icon128.png" },
-  "action": { "default_title": "Zimu flashcards", "default_icon": { "48": "icons/icon48.png" } },
+  "icons": {
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Zimu flashcards",
+    "default_icon": {
+      "48": "icons/icon48.png"
+    }
+  },
   "background": {
     "service_worker": "background.js",
-    "scripts": ["lib/core.js", "background.js"]
+    "scripts": [
+      "lib/core.js",
+      "background.js"
+    ]
   },
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
+    "https://jellyfin.example.com/*",
     "http://jellyfin-host/*",
     "http://192.0.2.10/*",
     "http://localhost/*",
@@ -21,6 +35,7 @@
   "content_scripts": [
     {
       "matches": [
+        "https://jellyfin.example.com/*",
         "http://jellyfin-host/*",
         "http://192.0.2.10/*",
         "http://localhost/*",
@@ -34,14 +49,19 @@
         "content/jellyfin.js",
         "content/main.js"
       ],
-      "css": ["content/overlay.css"],
+      "css": [
+        "content/overlay.css"
+      ],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["data/cedict.u8"],
+      "resources": [
+        "data/cedict.u8"
+      ],
       "matches": [
+        "https://jellyfin.example.com/*",
         "http://jellyfin-host/*",
         "http://192.0.2.10/*",
         "http://localhost/*",
@@ -50,6 +70,9 @@
     }
   ],
   "browser_specific_settings": {
-    "gecko": { "id": "zimu@nicholaspsmith", "strict_min_version": "128.0" }
+    "gecko": {
+      "id": "zimu@nicholaspsmith",
+      "strict_min_version": "128.0"
+    }
   }
 }

@@ -70,10 +70,44 @@
       <p id="list-empty" class="empty" hidden>No cards yet.</p>
     </section>
     <section id="sentences" hidden>
-      <input id="sentence-search" type="search" placeholder="Search Chinese, pinyin, English or the explanation">
-      <div id="sentence-list"></div>
-      <p id="sentences-empty" class="empty" hidden>No sentence translations yet.<br>
-        <span class="muted">Rest the mouse on a subtitle line (not on a word) and Claude explains it; every explanation lands here.</span></p>
+      <div class="subtabs">
+        <button id="sent-mode-review" class="tab">Review <span id="sentence-due" class="pill">0</span></button>
+        <button id="sent-mode-all" class="tab">All</button>
+      </div>
+
+      <div id="sent-review">
+        <div id="sr-empty" class="empty" hidden>
+          <p>No sentences due right now.</p>
+          <p class="muted">Click a subtitle line (not a word) and Claude explains it; every explained line comes up here for review.</p>
+        </div>
+        <div id="sr-card" class="card" hidden>
+          <div id="sr-line" class="sentence-front"></div>
+          <div id="sr-back" class="back" hidden>
+            <div id="sr-py" class="pinyin-line"></div>
+            <div id="sr-en" class="sentence-en"></div>
+            <div id="sr-x"></div>
+          </div>
+          <div class="source">
+            <button id="sr-play" class="play" title="Play this line in Jellyfin (P)">▶ Play</button>
+            <span id="sr-source" class="muted"></span>
+          </div>
+          <div class="grade">
+            <button id="sr-show" class="primary">Show answer <kbd>space</kbd></button>
+            <div id="sr-grades" class="grades" hidden>
+              <button data-sgrade="again" class="again">Again <kbd>1</kbd></button>
+              <button data-sgrade="good" class="good">Good <kbd>2</kbd></button>
+              <button data-sgrade="easy" class="easy">Easy <kbd>3</kbd></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="sent-all" hidden>
+        <input id="sentence-search" type="search" placeholder="Search Chinese, pinyin, English or the explanation">
+        <div id="sentence-list"></div>
+        <p id="sentences-empty" class="empty" hidden>No sentence translations yet.<br>
+          <span class="muted">Click a subtitle line (not a word) and Claude explains it; every explanation lands here.</span></p>
+      </div>
     </section>
 
     <section id="settings" hidden>

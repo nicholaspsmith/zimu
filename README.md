@@ -29,7 +29,10 @@ Zen/Firefox.
   Needs your Anthropic API key (🗂 → Settings); uses Claude Opus 5.5 at low
   effort, about 1¢ per new line, and each line is explained once.
 - **Sentences** (flashcard page): every explained line, with its pinyin,
-  subtitle, explanation and a ▶ link back to the moment; searchable.
+  subtitle, explanation and a ▶ link back to the moment. **Review** quizzes
+  you on them with the same spaced repetition as word cards: the Chinese line
+  on the front, then pinyin, subtitle and explanation (space reveals, 1/2/3
+  grade, P plays the line in Jellyfin); **All** lists and searches them.
 - **Sync between Macs**: flashcards, review progress, sentences and
   deletions sync through your Jellyfin server, stored with your Jellyfin
   user (as its "custom display preferences" for a client called `zimu`), so
@@ -79,7 +82,7 @@ npm run build      # fetches CC-CEDICT, vendors pinyin-pro,
 **Chrome / Brave:** `chrome://extensions` → Developer mode → Load unpacked →
 pick `~/Code/zimu/src`.
 
-**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.7.0.xpi` onto
+**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.8.0.xpi` onto
 the browser (unsigned add-ons need `xpinstall.signatures.required = false`
 in `about:config`), or load `src/manifest.json` temporarily from
 `about:debugging` → This Firefox.
@@ -118,7 +121,7 @@ browser (`POST /Sessions/{id}/Playing`).
 ```sh
 npm test                 # unit tests (pinyin, cues, segmentation, scheduling)
 node test/e2e/run.js     # Chrome for Testing + a fake Jellyfin and
-                         # Anthropic endpoint, 50 checks,
+                         # Anthropic endpoint, 51 checks,
                          # screenshots in ./e2e-out
 node test/e2e/run.js --firefox   # same in Firefox Developer Edition
 ```

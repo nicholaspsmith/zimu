@@ -428,6 +428,32 @@ async function waitFor(fn, ms = 8000, step = 100) {
     // every explanation lands in the flashcards' Sentences tab
     await cards.bringToFront();
     await cards.click('#tab-sentences');
+
+    // review mode comes first: the line on the front, the answer on reveal
+    const srFront = await waitFor(() => cards.evaluate(() => {
+      const card = document.getElementById('sr-card');
+      return !card.hidden ? { line: document.getElementById('sr-line').textContent, backHidden: document.getElementById('sr-back').hidden, due: document.getElementById('sentence-due').textContent } : null;
+    }), 4000);
+    await cards.keyboard.press('Space');
+    const answer = await cards.evaluate(() => ({
+      py: document.getElementById('sr-py').textContent,
+      en: document.getElementById('sr-en').textContent,
+      x: document.getElementById('sr-x').innerText,
+    }));
+    await cards.screenshot({ path: path.join(OUT, '9-sentence-review.png') });
+    await cards.keyboard.press('2'); // Good
+    const graded = await waitFor(() => cards.evaluate(async () => {
+      const all = await chrome.storage.local.get(null);
+      const rec = Object.entries(all).find(([k]) => k.startsWith('s:'))[1];
+      return !document.getElementById('sr-empty').hidden && rec.box === 1 && rec.due > Date.now()
+        ? { box: rec.box, due: document.getElementById('sentence-due').textContent, updated: rec.updated >= rec.reviewed } : null;
+    }), 4000);
+    check('sentence review: line on the front, pinyin/subtitle/explanation on reveal, Good schedules it',
+      !!srFront && srFront.line === '你今天想去哪儿吃饭？' && srFront.backHidden && srFront.due === '1' &&
+      answer.py.includes('nǐ jīntiān') && answer.en.includes('Where do you want') && /erhua/.test(answer.x) &&
+      !!graded && graded.due === '0' && graded.updated, JSON.stringify({ srFront, graded }));
+
+    await cards.click('#sent-mode-all');
     const listed = await waitFor(() => cards.evaluate(() => {
       const items = [...document.querySelectorAll('.sentence-item')];
       return items.length === 1 ? { zh: items[0].querySelector('.sentence-zh').textContent, x: items[0].querySelector('.explanation').innerText, play: !!items[0].querySelector('.play'), count: document.getElementById('sentence-count').textContent } : null;

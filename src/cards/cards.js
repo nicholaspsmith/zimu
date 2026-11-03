@@ -234,7 +234,7 @@ function setView(v) {
   }
   if (v === 'review') { buildQueue(); showNext(); }
   else if (v === 'list') renderList();
-  else if (v === 'sentences') renderSentences();
+  else if (v === 'sentences') setSentMode(sentMode);
   else renderSettings();
 }
 
@@ -262,7 +262,74 @@ function explanationNode(text) {
 async function loadSentences() {
   sentences = await Z.Sentences.all();
   $('sentence-count').textContent = sentences.length;
+  const now = Date.now();
+  $('sentence-due').textContent = sentences.filter((x) => Z.isDue(x, now)).length;
 }
+
+// ---- sentence review ------------------------------------------------------------
+// Same spaced repetition as word cards: the front is the Chinese line; the
+// answer is its pinyin, the subtitle and Claude's explanation.
+
+let sentMode = 'review';
+let sQueue = [];
+let sCurrent = null;
+
+function setSentMode(mode) {
+  sentMode = mode;
+  $('sent-review').hidden = mode !== 'review';
+  $('sent-all').hidden = mode !== 'all';
+  $('sent-mode-review').classList.toggle('active', mode === 'review');
+  $('sent-mode-all').classList.toggle('active', mode === 'all');
+  if (mode === 'review') { buildSentQueue(); showNextSentence(); } else renderSentences();
+}
+
+function buildSentQueue() {
+  const now = Date.now();
+  sQueue = sentences.filter((x) => Z.isDue(x, now)).sort((a, b) => (a.due || 0) - (b.due || 0));
+}
+
+function showNextSentence() {
+  sCurrent = sQueue.shift() || null;
+  $('sr-empty').hidden = !!sCurrent;
+  $('sr-card').hidden = !sCurrent;
+  if (!sCurrent) return;
+  const x = sCurrent;
+  $('sr-line').textContent = x.line;
+  $('sr-py').textContent = x.pinyin || '';
+  $('sr-en').replaceChildren(...(x.english
+    ? [h('span', { class: 'muted small' }, x.englishSource === 'mt' ? 'Machine translation: ' : 'Subtitle: '), x.english]
+    : []));
+  $('sr-x').replaceChildren(explanationNode(x.explanation));
+  $('sr-source').textContent = sourceLabel(x);
+  $('sr-play').hidden = !x.source;
+  $('sr-back').hidden = true;
+  $('sr-grades').hidden = true;
+  $('sr-show').hidden = false;
+}
+
+function revealSentence() {
+  if (!sCurrent) return;
+  $('sr-back').hidden = false;
+  $('sr-grades').hidden = false;
+  $('sr-show').hidden = true;
+}
+
+async function gradeSentence(g) {
+  if (!sCurrent || $('sr-grades').hidden) return;
+  const next = Z.schedule(sCurrent, g);
+  if (g === 'again') sQueue.push({ ...sCurrent, ...next }); // again this session
+  await Z.Sentences.update(sCurrent.key, { ...next, reviewed: Date.now() });
+  showNextSentence();
+}
+
+$('sent-mode-review').onclick = () => setSentMode('review');
+$('sent-mode-all').onclick = () => setSentMode('all');
+$('sr-show').onclick = revealSentence;
+$('sr-play').onclick = () => play(sCurrent);
+$('sr-grades').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-sgrade]');
+  if (b) gradeSentence(b.dataset.sgrade);
+});
 
 function renderSentences() {
   const q = $('sentence-search').value.trim().toLowerCase();
@@ -286,7 +353,9 @@ function renderSentences() {
 $('sentence-search').oninput = renderSentences;
 Z.Sentences.onChange(async () => {
   await loadSentences();
-  if (view === 'sentences') renderSentences();
+  if (view !== 'sentences') return;
+  if (sentMode === 'all') renderSentences();
+  else if (!sCurrent) { buildSentQueue(); showNextSentence(); }
 });
 
 // ---- settings: Anthropic API key ---------------------------------------------
@@ -334,12 +403,16 @@ $('export-json').onclick = exportJson;
 $('import-json').onchange = (e) => { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ''; };
 
 document.addEventListener('keydown', (e) => {
-  if (view !== 'review' || e.metaKey || e.ctrlKey || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
-  if (e.key === ' ') { e.preventDefault(); reveal(); }
-  else if (e.key === '1') grade('again');
-  else if (e.key === '2') grade('good');
-  else if (e.key === '3') grade('easy');
-  else if (e.key.toLowerCase() === 'p') play(current);
+  if (e.metaKey || e.ctrlKey || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+  const words = view === 'review';
+  const lines = view === 'sentences' && sentMode === 'review';
+  if (!words && !lines) return;
+  const doGrade = words ? grade : gradeSentence;
+  if (e.key === ' ') { e.preventDefault(); (words ? reveal : revealSentence)(); }
+  else if (e.key === '1') doGrade('again');
+  else if (e.key === '2') doGrade('good');
+  else if (e.key === '3') doGrade('easy');
+  else if (e.key.toLowerCase() === 'p') play(words ? current : sCurrent);
 });
 
 Z.Cards.onChange((next) => {

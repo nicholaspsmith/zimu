@@ -30,6 +30,14 @@ Zen/Firefox.
   effort, about 1¢ per new line, and each line is explained once.
 - **Sentences** (flashcard page): every explained line, with its pinyin,
   subtitle, explanation and a ▶ link back to the moment; searchable.
+- **Sync between Macs**: flashcards, review progress, sentences and
+  deletions sync through your Jellyfin server, stored with your Jellyfin
+  user (as its "custom display preferences" for a client called `zimu`), so
+  any browser signed in to the same Jellyfin user gets the same set. It
+  syncs on start-up, every 5 minutes, a few seconds after any change, when
+  the flashcard page opens, and on **Sync now**; for each card or sentence
+  the newer change wins. Settings and the API key stay per browser. Open
+  Jellyfin once after installing so Zimu can borrow its login.
 - **☆ Save** a word or phrase to flashcards. Each card keeps the sentence,
   its pinyin and English, and the **exact moment in the video**.
 - **Flashcards** (toolbar icon or 🗂 on the overlay): spaced-repetition
@@ -71,7 +79,7 @@ npm run build      # fetches CC-CEDICT, vendors pinyin-pro,
 **Chrome / Brave:** `chrome://extensions` → Developer mode → Load unpacked →
 pick `~/Code/zimu/src`.
 
-**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.6.1.xpi` onto
+**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.7.0.xpi` onto
 the browser (unsigned add-ons need `xpinstall.signatures.required = false`
 in `about:config`), or load `src/manifest.json` temporarily from
 `about:debugging` → This Firefox.
@@ -92,8 +100,6 @@ The extension runs on `https://jellyfin.example.com`, `http://jellyfin-host:*`, 
 
 - Image subtitles (PGS, VobSub) can't be read; you need a text track.
   The OpenSubtitles plugin on the server can fetch one.
-- Flashcards live in the browser's extension storage: they don't sync
-  between browsers or Macs yet. Back up/Restore moves them by hand.
 - Segmentation is dictionary-based (bidirectional maximum matching), so the
   occasional word boundary will be off.
 
@@ -112,7 +118,7 @@ browser (`POST /Sessions/{id}/Playing`).
 ```sh
 npm test                 # unit tests (pinyin, cues, segmentation, scheduling)
 node test/e2e/run.js     # Chrome for Testing + a fake Jellyfin and
-                         # Anthropic endpoint, 47 checks,
+                         # Anthropic endpoint, 50 checks,
                          # screenshots in ./e2e-out
 node test/e2e/run.js --firefox   # same in Firefox Developer Edition
 ```

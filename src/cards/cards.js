@@ -155,7 +155,7 @@ async function importJson(file) {
     let added = 0;
     for (const c of incoming) {
       if (!c || !c.hanzi || byHanzi.has(c.hanzi)) continue;
-      byHanzi.set(c.hanzi, c);
+      byHanzi.set(c.hanzi, { ...c, updated: Date.now() }); // newer than any old deletion
       added++;
     }
     await Z.Cards.replaceAll([...byHanzi.values()]);
@@ -192,6 +192,36 @@ $('perm-grant').onclick = () => {
 chrome.permissions.onAdded.addListener(checkPermissions);
 chrome.permissions.onRemoved.addListener(checkPermissions);
 checkPermissions();
+
+// ---- sync between Macs (through Jellyfin) ------------------------------------
+
+function ago(ms) {
+  const s = Math.round((Date.now() - ms) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  return `${Math.round(s / 3600)} h ago`;
+}
+
+async function paintSync() {
+  const { syncStatus: st } = await chrome.storage.local.get('syncStatus');
+  const el = $('sync-status');
+  if (!st) { el.textContent = ''; return; }
+  el.textContent = st.ok ? `Synced ${ago(st.at)}` : `Sync: ${st.error}`;
+  el.title = st.ok ? `${st.cards} cards, ${st.sentences} sentences on the Jellyfin server` : '';
+  el.classList.toggle('sync-error', !st.ok);
+}
+
+$('sync-now').onclick = async () => {
+  $('sync-now').disabled = true;
+  $('sync-status').textContent = 'Syncing…';
+  await chrome.runtime.sendMessage({ type: 'syncNow' });
+  $('sync-now').disabled = false;
+  paintSync();
+};
+chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.syncStatus) paintSync(); });
+setInterval(paintSync, 30000);
+paintSync();
+chrome.runtime.sendMessage({ type: 'syncNow' }); // pick up the other Mac's changes on open
 
 // ---- wiring ----------------------------------------------------------------
 

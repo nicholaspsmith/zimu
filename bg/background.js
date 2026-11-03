@@ -6,9 +6,11 @@
 // Chrome service worker and a Firefox background script.
 import '../src/lib/core.js';
 import { startExplainer } from './explain.js';
+import { startSync } from './sync.js';
 
 const Z = globalThis.Zimu;
 startExplainer();
+startSync();
 
 const CARDS_URL = chrome.runtime.getURL('cards/cards.html');
 const mtCache = new Map();

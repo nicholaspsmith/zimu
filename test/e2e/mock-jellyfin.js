@@ -51,7 +51,7 @@ setInterval(async () => {
 </script></body></html>`;
 
 function start(port, videoPath) {
-  const state = { playing: false, commands: [], log: [], claude: [] };
+  const state = { playing: false, commands: [], log: [], claude: [], prefs: {}, prefPosts: 0 };
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
     const p = url.pathname;
@@ -113,6 +113,21 @@ function start(port, videoPath) {
           { Type: 'Subtitle', Index: 2, Language: 'chi', DisplayTitle: 'Chinese (Simplified)', IsTextSubtitleStream: true },
           { Type: 'Subtitle', Index: 3, Language: 'eng', DisplayTitle: 'English', IsTextSubtitleStream: true },
         ] }] });
+    }
+    // per-user custom display preferences (Zimu's sync store); POST replaces
+    if (p === '/DisplayPreferences/zimu-sync' && url.searchParams.get('client') === 'zimu') {
+      if (req.method === 'GET') {
+        return json(200, { Id: 'zimu-sync', Client: 'zimu', SortBy: 'SortName', SortOrder: 'Ascending', ScrollDirection: 'Horizontal', CustomPrefs: { ...state.prefs } });
+      }
+      let body = '';
+      req.on('data', (d) => (body += d));
+      req.on('end', () => {
+        state.prefs = JSON.parse(body).CustomPrefs || {};
+        state.prefPosts++;
+        res.writeHead(204);
+        res.end();
+      });
+      return;
     }
     if (p === '/Videos/item1/ms1/Subtitles/2/Stream.js') return json(200, events(zh));
     if (p === '/Videos/item1/ms1/Subtitles/3/Stream.js') return json(200, events(en));

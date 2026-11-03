@@ -1234,7 +1234,20 @@
     return v && v.isConnected ? v : null;
   }
 
+  // Hand the borrowed Jellyfin login to the background so flashcards can
+  // sync through this server (also from the flashcard page).
+  let sentAuth = '';
+  function shareAuth() {
+    const c = J.credentials();
+    if (!c) return;
+    const sig = `${c.base}|${c.userId}|${c.token}`;
+    if (sig === sentAuth) return;
+    sentAuth = sig;
+    send({ type: 'jellyfinAuth', server: c.base, token: c.token, userId: c.userId });
+  }
+
   setInterval(() => {
+    shareAuth();
     const v = findVideo();
     if (v && J.credentials()) attach(v); else if (!v) detach();
     if (S.video) {

@@ -70,6 +70,12 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const page = await browser.newPage();
     page.on('console', (m) => { if (/zimu/i.test(m.text())) console.log('  [page]', m.text()); });
     page.on('pageerror', (e) => console.log('  [pageerror]', e.message));
+    await page.evaluateOnNewDocument(() => {
+      window.__pauses = [];
+      document.addEventListener('pause', (e) => {
+        window.__pauses.push([e.target.currentTime.toFixed(2), new Error().stack.split('\n').slice(2, 4).join(' / ')]);
+      }, true);
+    });
     await page.goto(`${BASE}/web/index.html#/video`);
 
     const shown = await waitFor(() => page.evaluate(() => document.querySelectorAll('#zimu-root:not(.zimu-hidden) .zimu-w').length), 15000);
@@ -103,6 +109,7 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const heard = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return !v.paused && v.currentTime > 4.6 && v.currentTime < 5.2 ? v.currentTime : null; }), 3000, 30);
     const carried = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return !v.paused && v.currentTime > 6.2 ? v.currentTime : null; }), 3000, 50);
     check('clicking a word plays from it and (auto-pause off) keeps going', heard != null && carried != null, `${heard} → ${carried}`);
+    if (carried == null) console.log('  pauses:', await page.evaluate(() => JSON.stringify(window.__pauses || [])));
     // ▶ Hear it plays just the word
     await page.evaluate(() => [...document.querySelectorAll('.zimu-popup .zimu-btn')].find((b) => b.textContent.includes('Hear it')).click());
     const wordOnly = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 4.6 ? v.currentTime : null; }), 4000, 50);
@@ -460,6 +467,41 @@ async function waitFor(fn, ms = 8000, step = 100) {
     check('…and stops at the end of that line', stopped2 != null && stopped2 >= 9.4 && stopped2 < 10.2, String(stopped2));
     const zhLine = await fresh.evaluate(() => document.querySelector('.zimu-zh').innerText.replace(/\s+/g, ''));
     check('ASS tags stripped', !zhLine.includes('an8'), zhLine.slice(0, 40));
+
+    // ---- sync between Macs, through the Jellyfin server --------------------
+    const pushed = await waitFor(() => {
+      const keys = Object.keys(state.prefs);
+      return keys.includes('c:吃饭') && keys.some((k) => k.startsWith('s:')) ? keys : null;
+    }, 15000, 200);
+    check('this Mac’s card and sentence reach the Jellyfin server', !!pushed, (pushed || Object.keys(state.prefs)).join(' '));
+
+    // the other Mac: reviews 吃饭, adds 学习, deletes the sentence
+    const t0 = Date.now() - 500; // just before now, so a delete made here afterwards is newer
+    const sKey = Object.keys(state.prefs).find((k) => k.startsWith('s:'));
+    const chifan = JSON.parse(state.prefs['c:吃饭']);
+    state.prefs['c:吃饭'] = JSON.stringify({ ...chifan, box: 4, updated: t0 });
+    state.prefs['c:学习'] = JSON.stringify({ id: 'other1', hanzi: '学习', pinyin: 'xuéxí', english: 'to study', created: t0, updated: t0, box: 0, due: 0 });
+    delete state.prefs[sKey];
+    state.prefs[`d:${sKey}`] = String(t0);
+    await cards.bringToFront();
+    await cards.click('#sync-now');
+    const pulled = await waitFor(() => cards.evaluate(async () => {
+      const all = await chrome.storage.local.get(null);
+      const byHanzi = Object.fromEntries((all.cards || []).map((c) => [c.hanzi, c]));
+      const sentences = Object.keys(all).filter((k) => k.startsWith('s:')).length;
+      return byHanzi['学习'] && byHanzi['吃饭'].box === 4 && sentences === 0
+        ? { cards: Object.keys(byHanzi), status: document.getElementById('sync-status').textContent } : null;
+    }), 8000, 200);
+    check('the other Mac’s review, new card and deletion arrive here', !!pulled && /Synced/.test(pulled.status), JSON.stringify(pulled));
+
+    // deleting here reaches the server (sync runs a few seconds after a change)
+    await cards.click('#tab-list');
+    await cards.evaluate(() => {
+      const row = [...document.querySelectorAll('#rows tr')].find((tr) => tr.textContent.includes('学习'));
+      row.querySelector('button[title="Delete card"]').click();
+    });
+    const deletedRemote = await waitFor(() => (!state.prefs['c:学习'] && state.prefs['d:c:学习'] ? true : null), 10000, 200);
+    check('a deletion here reaches the server', !!deletedRemote, Object.keys(state.prefs).join(' '));
   } finally {
     await browser.close();
     server.close();

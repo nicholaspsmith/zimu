@@ -46,6 +46,13 @@
 
   const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
+  // Deletions are remembered (key → time) so they reach the other Mac.
+  async function tombstone(key) {
+    const { deleted = {} } = await area().get('deleted');
+    deleted[key] = Date.now();
+    await area().set({ deleted });
+  }
+
   const Cards = {
     async all() {
       const r = await area().get('cards');
@@ -59,7 +66,8 @@
       const cards = await Cards.all();
       const existing = cards.find((c) => c.hanzi === card.hanzi);
       if (existing) return existing;
-      const full = { id: newId(), created: Date.now(), box: 0, due: Date.now(), ...card };
+      const now = Date.now();
+      const full = { id: newId(), created: now, box: 0, due: now, ...card, updated: now };
       cards.push(full);
       await Cards.replaceAll(cards);
       return full;
@@ -68,15 +76,19 @@
       const cards = await Cards.all();
       const i = cards.findIndex((c) => c.id === id);
       if (i < 0) return null;
-      cards[i] = { ...cards[i], ...patch };
+      cards[i] = { ...cards[i], ...patch, updated: Date.now() };
       await Cards.replaceAll(cards);
       return cards[i];
     },
     async removeByHanzi(hanzi) {
       await Cards.replaceAll((await Cards.all()).filter((c) => c.hanzi !== hanzi));
+      await tombstone(`c:${hanzi}`);
     },
     async remove(id) {
-      await Cards.replaceAll((await Cards.all()).filter((c) => c.id !== id));
+      const cards = await Cards.all();
+      const gone = cards.find((c) => c.id === id);
+      await Cards.replaceAll(cards.filter((c) => c.id !== id));
+      if (gone) await tombstone(`c:${gone.hanzi}`);
     },
     onChange(cb) {
       chrome.storage.onChanged.addListener((changes, name) => {
@@ -102,10 +114,11 @@
     async setDismissed(key, dismissed) {
       const rec = await Sentences.get(key);
       if (!rec || !!rec.dismissed === dismissed) return;
-      await area().set({ [`s:${key}`]: { ...rec, dismissed } });
+      await area().set({ [`s:${key}`]: { ...rec, dismissed, updated: Date.now() } });
     },
     async remove(key) {
       await area().remove(`s:${key}`);
+      await tombstone(`s:${key}`);
     },
     onChange(cb) {
       chrome.storage.onChanged.addListener((changes, name) => {

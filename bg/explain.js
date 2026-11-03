@@ -47,6 +47,7 @@ function sentenceRecord(req, text, model, created = Date.now()) {
     model,
     source: req.source || null,
     created,
+    updated: created,
   };
 }
 

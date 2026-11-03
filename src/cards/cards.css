@@ -181,3 +181,6 @@ a { color: var(--accent); }
 .explanation .x-bullet { margin: 2px 0 2px 18px; position: relative; }
 .explanation .x-bullet::before { content: "•"; position: absolute; left: -13px; color: var(--muted); }
 .explanation b { color: var(--pinyin); }
+
+#sync-status { white-space: nowrap; }
+#sync-status.sync-error { color: var(--accent); }

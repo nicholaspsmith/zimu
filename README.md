@@ -28,11 +28,17 @@ Zen/Firefox.
   review, and **▶ Play** jumps your Jellyfin tab to that line and stops at
   its end so you can hear it again. Export to Anki (each row carries a link
   that plays the moment) or back up/restore as JSON.
-- Line navigation like LLN: **A** previous line, **S** repeat, **D** next,
-  **Q** pause at the end of every line.
-- **Speed** from 60% to 100% in 1% steps: − / + on the toolbar, **[ ]** (1%)
-  and **{ }** (5%), or the slider under ⚙. Pitch is kept, so voices sound
-  natural, just slower. Click the percentage to go back to 100%.
+- **Under the subtitles** (on hover): ⏮ previous line, ▶/⏸ play/pause,
+  ⏭ next line, Auto-pause. Keys like LLN: **A** previous, **S** repeat,
+  **D** next, **Q** auto-pause.
+- **In Jellyfin's bottom bar**, before its own ⚙: speed, Zimu settings
+  (tune icon) and flashcards (cards icon).
+- **Speed** from 60% to 100% in 1% steps: type a percentage into the box
+  (Enter applies, Esc cancels, ↑/↓ step), click − / +, or hold them to run
+  through the range (it speeds up the longer you hold), or use **[ ]** (1%)
+  and **{ }** (5%). Pitch is kept, so voices sound natural, just slower.
+- **Colour by tone** (⚙): 1 blue, 2 yellow, 3 brownish orange, 4 red,
+  neutral grey.
 - Hovering the subtitles doesn't pause (turn "Pause while the mouse is over
   the subtitles" on under ⚙ if you want it).
 
@@ -57,7 +63,7 @@ npm run build      # fetches CC-CEDICT, vendors pinyin-pro,
 **Chrome / Brave:** `chrome://extensions` → Developer mode → Load unpacked →
 pick `~/Code/zimu/src`.
 
-**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.3.0.xpi` onto
+**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.4.0.xpi` onto
 the browser (unsigned add-ons need `xpinstall.signatures.required = false`
 in `about:config`), or load `src/manifest.json` temporarily from
 `about:debugging` → This Firefox.
@@ -98,7 +104,7 @@ browser (`POST /Sessions/{id}/Playing`).
 ```sh
 npm test                 # unit tests (pinyin, cues, segmentation, scheduling)
 node test/e2e/run.js     # Chrome for Testing + a fake Jellyfin and
-                         # Anthropic endpoint, 26 checks,
+                         # Anthropic endpoint, 35 checks,
                          # screenshots in ./e2e-out
 node test/e2e/run.js --firefox   # same in Firefox Developer Edition
 ```

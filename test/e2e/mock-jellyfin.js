@@ -25,11 +25,19 @@ const events = (rows) => ({ TrackEvents: rows.map(([s, e, t], i) => ({ Id: Strin
 const page = (autoplay) => `<!doctype html><html><head><meta charset="utf-8"><title>Jellyfin</title>
 <style>body{margin:0;background:#111} video{width:100vw;height:100vh;object-fit:contain}</style></head><body>
 <div class="videoPlayerContainer"><video class="htmlvideoplayer" src="/media/test.mp4" ${autoplay ? 'autoplay' : ''} playsinline></video></div>
-<div class="videoOsdBottom videoOsdBottom-hidden"></div>
+<div class="videoOsdBottom videoOsdBottom-maincontrols videoOsdBottom-hidden" style="position:fixed;left:0;right:0;bottom:0;padding:8px;background:rgba(0,0,0,.6);color:#fff;font:16px system-ui">
+  <div class="osdControls"><div class="buttons focuscontainer-x" style="display:flex;align-items:center;gap:6px">
+    <div dir="ltr"><button class="btnPause">pause</button></div>
+    <div class="osdTimeText"><span class="endsAtText"></span></div>
+    <button class="btnVideoOsdSettings" title="Settings">settings</button>
+    <button class="btnFullscreen">fullscreen</button>
+  </div></div>
+</div>
 <script>
 localStorage.setItem('_deviceId2', '${DEVICE}');
 localStorage.setItem('jellyfin_credentials', JSON.stringify({Servers:[{ManualAddress:location.origin,AccessToken:'${TOKEN}',UserId:'${USER}',DateLastAccessed:Date.now()}]}));
 const v = document.querySelector('video');
+document.addEventListener('keydown', (e) => { if (/^[0-9]$/.test(e.key)) v.currentTime = v.duration * Number(e.key) / 10; });
 const report = () => fetch('/mock/state', {method:'POST', body: JSON.stringify({playing: v.currentTime > 0 || !v.paused})});
 v.addEventListener('playing', report);
 setInterval(async () => {

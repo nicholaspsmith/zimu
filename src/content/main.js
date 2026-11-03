@@ -141,27 +141,145 @@
   let panel = null;
 
   lines.append(zhBox, enBox);
-  root.append(toolbar, lines);
+  root.append(lines, toolbar);
 
   function button(label, title, onclick) {
     return h('button', { class: 'zimu-btn', title, onclick: (e) => { e.stopPropagation(); onclick(e); } }, label);
   }
 
-  const autoBtn = button('⏸ auto', 'Pause at the end of each line (Q)', () => toggleAutoPause());
-  const speedLabel = button('100%', 'Playback speed — click for 100%', () => setSpeed(100));
-  speedLabel.classList.add('zimu-speed');
+  const autoBtn = button('Auto-pause', 'Pause at the end of each line (Q)', () => toggleAutoPause());
+  const playBtn = button('▶', 'Play / pause (space)', () => {
+    const v = S.video;
+    if (!v) return;
+    if (v.paused) v.play().catch(() => {}); else v.pause();
+  });
+  playBtn.classList.add('zimu-play');
+  const paintPlay = () => {
+    const playing = !!S.video && !S.video.paused;
+    playBtn.textContent = playing ? '⏸' : '▶';
+  };
   toolbar.append(
     button('⏮', 'Previous line (A)', () => gotoLine('prev')),
-    button('↻', 'Repeat line (S)', () => gotoLine('repeat')),
+    playBtn,
     button('⏭', 'Next line (D)', () => gotoLine('next')),
     autoBtn,
-    button('−', 'Slower by 1% ([, or { for 5%)', () => setSpeed(S.settings.speed - 1)),
-    speedLabel,
-    button('+', 'Faster by 1% (], or } for 5%)', () => setSpeed(S.settings.speed + 1)),
-    button('⚙', 'Subtitle settings', () => togglePanel()),
-    button('🗂', 'Flashcards', () => send({ type: 'openCards' })),
     statusEl,
   );
+
+  // ---- controls in Jellyfin's own bottom bar ---------------------------------
+  // Speed (type a % or step it), settings and flashcards sit among Jellyfin's
+  // buttons, before its own ⚙. Jellyfin re-creates that bar with the player,
+  // so mountOsd() re-inserts the group whenever it's missing.
+
+  function osdButton(icon, fallback, title, onclick) {
+    const b = h('button', {
+      type: 'button',
+      is: 'paper-icon-button-light',
+      class: 'paper-icon-button-light autoSize zimu-osd-btn',
+      title,
+      'aria-label': title,
+      onclick: (e) => { e.stopPropagation(); onclick(e, b); },
+    }, h('span', { class: `largePaperIconButton material-icons ${icon}`, 'aria-hidden': 'true', 'data-fallback': fallback }));
+    return b;
+  }
+
+  const speedInput = h('input', {
+    class: 'zimu-speed-input',
+    type: 'text',
+    inputmode: 'numeric',
+    maxlength: '3',
+    value: '100',
+    title: 'Playback speed, 60–100% (type a number, ↑/↓ to step)',
+    'aria-label': 'Playback speed percent',
+  });
+  const speedBox = h('label', { class: 'zimu-speed-box' }, speedInput, '%');
+  const commitSpeed = () => {
+    const n = parseInt(speedInput.value, 10);
+    if (Number.isFinite(n)) setSpeed(n); else paintSpeed(S.settings.speed);
+  };
+  speedInput.addEventListener('focus', () => speedInput.select());
+  speedInput.addEventListener('input', () => { speedInput.value = speedInput.value.replace(/\D/g, '').slice(0, 3); });
+  speedInput.addEventListener('blur', commitSpeed);
+  speedInput.addEventListener('keydown', (e) => {
+    e.stopPropagation(); // Jellyfin's player treats digits as "seek to N0%"
+    if (e.key === 'Enter') { e.preventDefault(); speedInput.blur(); }
+    else if (e.key === 'Escape') {
+      e.preventDefault();
+      speedInput.value = String(clampSpeed(S.settings.speed)); // so the blur commit is a no-op
+      speedInput.blur();
+    }
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const step = (e.shiftKey ? 5 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
+      setSpeed((parseInt(speedInput.value, 10) || S.settings.speed) + step);
+      speedInput.select();
+    }
+  });
+
+  // Press-and-hold: one step at once, then after HOLD_DELAY it repeats,
+  // starting every HOLD_START ms and speeding up by HOLD_ACCEL per step down
+  // to HOLD_FASTEST (60→100% takes ~2 s of holding).
+  const HOLD_DELAY = 400;
+  const HOLD_START = 160;
+  const HOLD_ACCEL = 0.85;
+  const HOLD_FASTEST = 35;
+
+  function holdToRepeat(btn, step) {
+    let timer = 0;
+    const stop = () => { clearTimeout(timer); timer = 0; };
+    const run = (wait) => {
+      timer = setTimeout(() => {
+        step();
+        run(Math.max(HOLD_FASTEST, wait * HOLD_ACCEL));
+      }, wait);
+    };
+    btn.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      btn.setPointerCapture?.(e.pointerId);
+      stop();
+      step();
+      timer = setTimeout(() => run(HOLD_START), HOLD_DELAY - HOLD_START);
+    });
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture', 'blur']) btn.addEventListener(ev, stop);
+    // keyboard activation (Enter/Space on the focused button) arrives as a
+    // click with detail 0; mouse clicks were already handled on pointerdown
+    btn.addEventListener('click', (e) => { if (e.detail === 0) step(); }, true);
+  }
+
+  const settingsBtn = osdButton('tune', 'tune', 'Zimu subtitle settings', (_e, b) => togglePanel(undefined, b));
+  const slowerBtn = osdButton('remove', 'remove', 'Slower by 1% — hold to keep going ([)', () => {});
+  const fasterBtn = osdButton('add', 'add', 'Faster by 1% — hold to keep going (])', () => {});
+  holdToRepeat(slowerBtn, () => setSpeed(S.settings.speed - 1));
+  holdToRepeat(fasterBtn, () => setSpeed(S.settings.speed + 1));
+  const osdGroup = h('div', { class: 'zimu-osd' },
+    slowerBtn,
+    speedBox,
+    fasterBtn,
+    settingsBtn,
+    osdButton('style', 'style', 'Zimu flashcards', () => send({ type: 'openCards' })));
+
+  function paintSpeed(speed) {
+    const n = clampSpeed(speed);
+    if (document.activeElement !== speedInput) speedInput.value = String(n);
+    speedBox.classList.toggle('zimu-on', n !== 100);
+  }
+
+  function mountOsd() {
+    if (osdGroup.isConnected) return;
+    const bar = document.querySelector('.videoOsdBottom-maincontrols .osdControls .buttons') ||
+      document.querySelector('.osdControls .buttons');
+    if (!bar) return;
+    const before = bar.querySelector(':scope > .btnVideoOsdSettings');
+    bar.insertBefore(osdGroup, before || null);
+    // Jellyfin draws icons from CSS classes; fall back to the font's ligature
+    // names if a class has no glyph.
+    osdGroup.querySelectorAll('[data-fallback]').forEach((span) => {
+      const c = getComputedStyle(span, '::before').content;
+      if (!c || c === 'none' || c === 'normal' || c === '""') span.textContent = span.dataset.fallback;
+    });
+  }
 
   function setStatus(text, ms = 6000) {
     S.status = text;
@@ -177,8 +295,7 @@
     root.classList.toggle('zimu-tones', !!st.toneColors);
     document.documentElement.classList.toggle('zimu-hide-native', !!st.hideNativeSubs && !!S.video && S.zhTrack != null);
     autoBtn.classList.toggle('zimu-on', !!st.autoPause);
-    speedLabel.textContent = `${clampSpeed(st.speed)}%`;
-    speedLabel.classList.toggle('zimu-on', clampSpeed(st.speed) !== 100);
+    paintSpeed(st.speed);
     applySpeed();
     render(true);
   }
@@ -324,8 +441,7 @@
     const speed = clampSpeed(n);
     S.settings.speed = speed;
     applySpeed();
-    speedLabel.textContent = `${speed}%`;
-    speedLabel.classList.toggle('zimu-on', speed !== 100);
+    paintSpeed(speed);
     setStatus(`Speed ${speed}%`, 1500);
     S.speedPending = true;
     clearTimeout(S.speedTimer);
@@ -735,13 +851,15 @@
 
   document.addEventListener('mousedown', (e) => {
     if (popup && !popup.contains(e.target)) closePopup();
-    if (panel && !panel.contains(e.target) && !toolbar.contains(e.target)) togglePanel(false);
+    if (panel && !panel.contains(e.target) && !toolbar.contains(e.target) && !osdGroup.contains(e.target)) togglePanel(false);
   }, true);
 
   // ---- settings panel ------------------------------------------------------
 
-  function togglePanel(force) {
+  // anchor: the button it opens from (Jellyfin's bar); the panel sits above it.
+  function togglePanel(force, anchor) {
     const open = force ?? !panel;
+    if (anchor) S.panelAnchor = anchor;
     if (panel) { panel.remove(); panel = null; }
     if (!open) return;
     const st = S.settings;
@@ -775,15 +893,17 @@
       check('hideNativeSubs', 'Hide Jellyfin’s own subtitles'),
       check('toneColors', 'Colour by tone'),
       check('machineTranslate', 'Machine-translate when there is no English track'),
-      h('label', { class: 'zimu-range' }, `Speed ${clampSpeed(st.speed)}%`,
-        h('input', { type: 'range', min: 60, max: 100, step: 1, value: clampSpeed(st.speed), oninput: (e) => {
-          e.target.parentNode.firstChild.textContent = `Speed ${e.target.value}%`;
-          setSpeed(Number(e.target.value));
-        } })),
       range('fontSize', 'Size', 18, 64),
       range('bottom', 'Height', 2, 60),
       h('div', { class: 'zimu-muted' }, 'Keys: A previous · S repeat · D next · Q auto-pause · [ ] speed ±1% ({ } ±5%) · Esc close'));
     root.append(panel);
+    const a = S.panelAnchor;
+    if (a && a.isConnected) {
+      const r = a.getBoundingClientRect();
+      panel.classList.add('zimu-panel-osd');
+      panel.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+      panel.style.bottom = `${window.innerHeight - r.top + 8}px`;
+    }
   }
 
   // ---- item / track loading ------------------------------------------------
@@ -930,6 +1050,7 @@
 
   const videoEvents = {
     play: () => {
+      paintPlay();
       // someone pressed play while we were holding: stop holding
       if (S.holds.size) { S.holds.clear(); S.weePaused = false; }
       kick();
@@ -949,7 +1070,7 @@
       kick();
     },
     seeked: () => kick(),
-    pause: () => kick(),
+    pause: () => { paintPlay(); kick(); },
   };
 
   function attach(video) {
@@ -963,6 +1084,8 @@
     syncNowPlaying('start');
     applySettings();
     kick(); // the video may already be playing, so no 'play' event will come
+    paintPlay();
+    mountOsd();
   }
 
   function detach() {
@@ -995,6 +1118,7 @@
       const visible = osd && !osd.classList.contains('videoOsdBottom-hidden') && osd.getBoundingClientRect().height > 0 &&
         getComputedStyle(osd).opacity !== '0';
       root.style.setProperty('--zimu-lift', visible ? `${Math.round(osd.getBoundingClientRect().height)}px` : '0px');
+      mountOsd();
       if (!S.video.paused) kick(); // keeps the loop alive if a frame was missed
       if (!S.video.paused && Date.now() - S.lastSync > 15000) syncNowPlaying('poll');
     }

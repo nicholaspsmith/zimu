@@ -121,19 +121,103 @@ async function waitFor(fn, ms = 8000, step = 100) {
     check('hovering the subtitles keeps playing', await page.evaluate(() => !document.querySelector('video').paused));
     await page.mouse.move(10, 10);
 
-    // speed: [ ] step 1%, { } step 5%, clamped to 60–100%
+    // layout: toolbar under the subtitles with play/pause; speed, settings and
+    // flashcards inside Jellyfin's bar, just before its own settings button
+    const layout = await page.evaluate(() => {
+      const lines = document.querySelector('.zimu-lines').getBoundingClientRect();
+      const tb = document.querySelector('.zimu-toolbar');
+      const osd = document.querySelector('.zimu-osd');
+      return {
+        below: tb.getBoundingClientRect().top >= lines.bottom,
+        labels: [...tb.querySelectorAll('button')].map((b) => b.title.split(' (')[0]),
+        inBar: !!osd && osd.parentElement.matches('.osdControls .buttons') && osd.nextElementSibling.matches('.btnVideoOsdSettings'),
+        fontPx: parseFloat(getComputedStyle(tb.querySelector('button')).fontSize),
+      };
+    });
+    check('toolbar sits under the subtitles, 20% larger, play/pause instead of repeat', layout.below && layout.fontPx === 15.6 &&
+      JSON.stringify(layout.labels) === JSON.stringify(['Previous line', 'Play / pause', 'Next line', 'Pause at the end of each line']), JSON.stringify(layout));
+    check('speed, settings and flashcards are in Jellyfin’s bar before its ⚙', layout.inBar);
+    await page.hover('.zimu-en');
+    await page.mouse.move(640, 760);
+    await page.hover('.zimu-lines .zimu-p');
+    await page.screenshot({ path: path.join(OUT, '7-controls.png') });
+
+    await page.evaluate(() => document.querySelector('video').pause());
+    await page.hover('.zimu-lines');
+    await page.click('.zimu-play');
+    await sleep(300);
+    const playing = await page.evaluate(() => [!document.querySelector('video').paused, document.querySelector('.zimu-play').textContent]);
+    await page.click('.zimu-play');
+    await sleep(300);
+    const paused = await page.evaluate(() => [document.querySelector('video').paused, document.querySelector('.zimu-play').textContent]);
+    check('play/pause button toggles playback', playing[0] && playing[1] === '⏸' && paused[0] && paused[1] === '▶', `${playing} / ${paused}`);
+    await page.mouse.move(10, 10);
+
+    const rate = () => page.evaluate(() => document.querySelector('video').playbackRate);
+    const speedValue = () => page.evaluate(() => document.querySelector('.zimu-speed-input').value);
+    async function typeSpeed(text, key = 'Enter') {
+      await page.click('.zimu-speed-input');
+      await page.keyboard.type(text);
+      await page.keyboard.press(key);
+      await sleep(150);
+    }
+
+    // keys: [ ] step 1%, { } step 5%, clamped to 60–100%
     await page.keyboard.press(']');
     await sleep(150);
-    const r100 = await page.evaluate(() => document.querySelector('video').playbackRate);
+    const r100 = await rate();
     for (let i = 0; i < 5; i++) await page.keyboard.press('[');
     await sleep(300);
-    const r95 = await page.evaluate(() => [document.querySelector('video').playbackRate, document.querySelector('.zimu-speed').textContent]);
+    const r95 = [await rate(), await speedValue()];
     for (let i = 0; i < 12; i++) await page.keyboard.press('{');
     await sleep(300);
-    const r60 = await page.evaluate(() => document.querySelector('video').playbackRate);
-    check('speed control 60–100% in 1% steps', r100 === 1 && Math.abs(r95[0] - 0.95) < 1e-9 && r95[1] === '95%' && Math.abs(r60 - 0.6) < 1e-9, `${r100} ${r95.join(' ')} ${r60}`);
-    await page.click('.zimu-speed');
+    const r60 = await rate();
+    check('speed keys: 60–100% in 1% steps', r100 === 1 && Math.abs(r95[0] - 0.95) < 1e-9 && r95[1] === '95' && Math.abs(r60 - 0.6) < 1e-9, `${r100} ${r95.join(' ')} ${r60}`);
+
+    // typing a percentage
+    const tBefore = await page.evaluate(() => document.querySelector('video').currentTime);
+    await typeSpeed('85');
+    const typed = [await rate(), await speedValue()];
+    const tAfter = await page.evaluate(() => document.querySelector('video').currentTime);
+    await typeSpeed('40');
+    const clamped = [await rate(), await speedValue()];
+    await typeSpeed('77', 'Escape');
+    const escaped = await rate();
+    check('typing a % sets the speed, clamps to 60–100, Esc cancels', Math.abs(typed[0] - 0.85) < 1e-9 && typed[1] === '85' &&
+      Math.abs(clamped[0] - 0.6) < 1e-9 && clamped[1] === '60' && Math.abs(escaped - 0.6) < 1e-9, `${typed} ${clamped} ${escaped}`);
+    check('digits typed into the speed box don’t reach Jellyfin (no seek)', Math.abs(tAfter - tBefore) < 0.05, `${tBefore.toFixed(2)} → ${tAfter.toFixed(2)}`);
+
+    // − / +: a click steps 1%, holding repeats faster and faster
+    await typeSpeed('100');
+    await page.click('.zimu-osd button[title^="Slower"]');
+    await sleep(150);
+    const oneClick = await speedValue();
+    const minus = await (await page.$('.zimu-osd button[title^="Slower"]')).boundingBox();
+    await page.mouse.move(minus.x + minus.width / 2, minus.y + minus.height / 2);
+    await page.mouse.down();
+    await sleep(700);
+    const after700 = Number(await speedValue());
+    await sleep(800);
+    const after1500 = Number(await speedValue());
+    await page.mouse.up();
+    await sleep(400);
+    const settled = Number(await speedValue());
+    check('click − steps 1%; holding it accelerates', oneClick === '99' && after700 >= 94 && after700 <= 97 &&
+      99 - after1500 >= 12 && settled === after1500, `click→${oneClick}, held 0.7 s→${after700}, 1.5 s→${after1500}, released→${settled}`);
+    await page.mouse.move(10, 10);
+    await typeSpeed('100');
+
+    // ⚙ in Jellyfin's bar opens the settings panel just above it
+    await page.click('.zimu-osd button[title="Zimu subtitle settings"]');
     await sleep(200);
+    const panelPos = await page.evaluate(() => {
+      const p = document.querySelector('.zimu-panel');
+      const b = document.querySelector('.zimu-osd button[title="Zimu subtitle settings"]');
+      return p && { above: p.getBoundingClientRect().bottom <= b.getBoundingClientRect().top, right: Math.round(p.getBoundingClientRect().right - b.getBoundingClientRect().right) };
+    });
+    check('⚙ opens settings above the button', !!panelPos && panelPos.above && Math.abs(panelPos.right) <= 2, JSON.stringify(panelPos));
+    await page.keyboard.press('Escape');
+    await page.mouse.click(10, 10);
 
     // keyboard: A goes to the previous line
     await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.2; });
@@ -143,9 +227,8 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const t = await page.evaluate(() => document.querySelector('video').currentTime);
     check('A jumps to previous line', t >= 0.3 && t < 1.5, t.toFixed(2));
 
-    // the toolbar's 🗂 button opens the flashcard page
-    await page.hover('.zimu-lines');
-    await page.click('.zimu-toolbar button[title="Flashcards"]');
+    // the 🗂 button in Jellyfin's bar opens the flashcard page
+    await page.click('.zimu-osd button[title="Zimu flashcards"]');
     const cardsTarget = await browser.waitForTarget((t) => t.url().includes('/cards/cards.html'), { timeout: 8000 });
     const cards = await cardsTarget.page();
     check('🗂 opens the flashcard page', !!cards, cardsTarget.url().split('/')[0]);
@@ -160,6 +243,15 @@ async function waitFor(fn, ms = 8000, step = 100) {
     check('pinyin-only mode', pyOnly.ruby === 0 && /[āáǎàēéěèīíǐìōóǒòūúǔù]/.test(pyOnly.text) && !/\p{Script=Han}/u.test(pyOnly.text) && pyOnly.en === '', pyOnly.text);
     await page.bringToFront();
     await page.screenshot({ path: path.join(OUT, '4-pinyin-only.png') });
+    await cards.evaluate(() => chrome.storage.local.set({ settings: { toneColors: true } }));
+    await sleep(400);
+    // 我觉得他还没睡着: wǒ(3) jué(2) de(5) tā(1) hái(2) méi(2) shuì(4) zháo(2)
+    const tones = await page.evaluate(() => Object.fromEntries([1, 2, 3, 4, 5].map((n) => {
+      const el = document.querySelector(`.zimu-zh .zimu-t${n}`);
+      return [n, el ? getComputedStyle(el).color : null];
+    })));
+    check('tone colours: 1 blue, 2 yellow, 3 brownish orange, 4 red, neutral grey', tones[1] === 'rgb(90, 169, 255)' && tones[2] === 'rgb(255, 216, 77)' && tones[3] === 'rgb(217, 138, 61)' &&
+      tones[4] === 'rgb(255, 92, 92)' && tones[5] === 'rgb(200, 200, 200)', JSON.stringify(tones));
     await cards.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
     // hovering the box (not a word) explains the sentence

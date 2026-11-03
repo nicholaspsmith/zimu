@@ -37,10 +37,10 @@ html.zimu-hide-native video::cue {
 .zimu-toolbar {
   pointer-events: auto;
   display: flex;
-  gap: 4px;
+  gap: 5px;
   align-items: center;
-  margin-bottom: 6px;
-  padding: 3px 6px;
+  margin-top: 6px;
+  padding: 4px 7px;
   border-radius: 8px;
   background: rgba(20, 20, 24, 0.72);
   opacity: 0;
@@ -53,14 +53,38 @@ html.zimu-hide-native video::cue {
 .zimu-btn {
   all: unset;
   cursor: pointer;
-  font: 13px/1 system-ui, sans-serif;
+  font: 15.6px/1 system-ui, sans-serif; /* 20% over the original 13px */
   color: #e8eaee;
-  padding: 5px 8px;
+  padding: 6px 9.6px;
   border-radius: 6px;
 }
 .zimu-btn:hover { background: rgba(255, 255, 255, 0.14); }
 .zimu-btn.zimu-on { background: #2f7d5b; color: #fff; }
-.zimu-speed { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+.zimu-play { min-width: 2.2em; text-align: center; }
+
+/* our group inside Jellyfin's bottom bar */
+.zimu-osd { display: inline-flex; align-items: center; margin: 0 0.25em; }
+.zimu-speed-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font: 600 1em/1 system-ui, -apple-system, sans-serif;
+  color: inherit;
+  cursor: text;
+}
+.zimu-speed-input {
+  width: 3.4ch;
+  padding: 3px 4px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 5px;
+}
+.zimu-speed-input:focus { outline: none; border-color: #fff; background: rgba(255, 255, 255, 0.18); }
+.zimu-speed-box.zimu-on .zimu-speed-input { background: rgba(47, 125, 91, 0.45); border-color: #3fa274; }
 
 /* the subtitle block */
 .zimu-lines {
@@ -111,11 +135,11 @@ html.zimu-hide-native video::cue {
 }
 .zimu-en:empty { display: none; }
 
-/* tone colours (Pleco-like) */
-.zimu-tones .zimu-t1 { color: #ff6b6b; }
-.zimu-tones .zimu-t2 { color: #ffc24b; }
-.zimu-tones .zimu-t3 { color: #69db7c; }
-.zimu-tones .zimu-t4 { color: #6cb2ff; }
+/* tone colours: 1 blue, 2 yellow, 3 brownish orange, 4 red, neutral grey */
+.zimu-tones .zimu-t1 { color: #5aa9ff; }
+.zimu-tones .zimu-t2 { color: #ffd84d; }
+.zimu-tones .zimu-t3 { color: #d98a3d; }
+.zimu-tones .zimu-t4 { color: #ff5c5c; }
 .zimu-tones .zimu-t5 { color: #c8c8c8; }
 .zimu-tones .zimu-zh rt { color: inherit; }
 
@@ -140,6 +164,7 @@ html.zimu-hide-native video::cue {
   -webkit-user-select: text;
 }
 .zimu-panel { bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
+.zimu-panel.zimu-panel-osd { position: fixed; left: auto; transform: none; }
 
 /* sentence explanation */
 .zimu-explain {

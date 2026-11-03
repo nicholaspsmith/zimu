@@ -94,8 +94,8 @@ td.pinyin { font-size: 15px; }
 .source { margin-top: 18px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
 .play { border-color: var(--accent); color: var(--accent); }
 .grade { margin-top: 20px; }
-.grade #r-grades { display: flex; gap: 10px; justify-content: center; }
-.grade #r-grades[hidden] { display: none; }
+.grade #r-grades, .grade .grades { display: flex; gap: 10px; justify-content: center; }
+.grade #r-grades[hidden], .grade .grades[hidden] { display: none; }
 .primary { background: var(--text); color: var(--bg); border-color: var(--text); padding: 10px 22px; }
 .again { border-color: #c0392b; }
 .good { border-color: #2f7d5b; }
@@ -184,3 +184,10 @@ a { color: var(--accent); }
 
 #sync-status { white-space: nowrap; }
 #sync-status.sync-error { color: var(--accent); }
+
+/* sentence review */
+.subtabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 16px; }
+.sentence-front { font: 600 34px/1.5 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif; }
+.pinyin-line { color: var(--pinyin); font-size: 18px; }
+#sr-card .explanation { text-align: left; }
+#sr-card .sentence-en { margin-top: 6px; }

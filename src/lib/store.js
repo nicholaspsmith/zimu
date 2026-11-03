@@ -116,6 +116,14 @@
       if (!rec || !!rec.dismissed === dismissed) return;
       await area().set({ [`s:${key}`]: { ...rec, dismissed, updated: Date.now() } });
     },
+    // Review progress and the like; stamps `updated` so it syncs.
+    async update(key, patch) {
+      const rec = await Sentences.get(key);
+      if (!rec) return null;
+      const next = { ...rec, ...patch, updated: Date.now() };
+      await area().set({ [`s:${key}`]: next });
+      return next;
+    },
     async remove(key) {
       await area().remove(`s:${key}`);
       await tombstone(`s:${key}`);

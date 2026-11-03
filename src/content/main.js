@@ -24,6 +24,7 @@
     zh: [], // cues; each may carry .en from a bilingual track
     en: [],
     shown: -2, // index of the cue on screen (-1 none)
+    anchor: -2, // index of the cue playing or last finished (-1 before the first)
     tokens: [], // flat token list of the shown cue
     sel: null, // {a, b} token range while dragging
     autoPausedIdx: -1,
@@ -385,10 +386,21 @@
     }
     const t = v.currentTime;
     const active = Z.activeIndex(S.zh, t);
-    // Keep the last line up (dimmed) until the next one starts.
-    const idx = active >= 0 ? active : Z.lastStartedIndex(S.zh, t);
+    const last = Z.lastStartedIndex(S.zh, t);
+    // A finished line stays up (dimmed) for LINGER_SECONDS so it can be
+    // finished reading, then clears through the rest of a silence.
+    const lingering = active < 0 && last >= 0 && t - S.zh[last].end <= LINGER_SECONDS;
+    const idx = active >= 0 ? active : lingering ? last : -1;
+    // The line we're in or just after; an open explanation belongs to it and
+    // stays through the silence until the next line starts.
+    const anchor = active >= 0 ? active : last;
+    const anchorChanged = anchor !== S.anchor;
+    S.anchor = anchor;
     lines.classList.toggle('zimu-past', active < 0);
-    if (idx === S.shown && !force) return;
+    if (idx === S.shown && !force) {
+      if (anchorChanged) syncExplain();
+      return;
+    }
     S.shown = idx;
     const cue = S.zh[idx];
     renderZh(cue);
@@ -397,6 +409,8 @@
   }
 
   // ---- playback loop -------------------------------------------------------
+
+  const LINGER_SECONDS = 3;
 
   let raf = 0;
   function tick() {
@@ -926,7 +940,7 @@
   // Called when the line on screen changes: drop a panel for another line,
   // and bring back the saved explanation of an already-explained one.
   async function syncExplain() {
-    const i = S.shown;
+    const i = S.anchor;
     if (explainPanel && Number(explainPanel.dataset.cue) !== i) closeExplain();
     if (i < 0 || explainPanel || !S.settings.explainOnHover) return;
     const key = explainKey(i);
@@ -936,7 +950,7 @@
       const saved = await Z.Sentences.get(key);
       known = !!saved && !saved.dismissed;
     }
-    if (known && S.shown === i && !explainPanel && !S.dismissedKeys.has(key)) openExplain(i);
+    if (known && S.anchor === i && !explainPanel && !S.dismissedKeys.has(key)) openExplain(i);
   }
 
   // A click on the box that isn't on a word (the English line, punctuation,

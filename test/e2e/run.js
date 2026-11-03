@@ -269,6 +269,17 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await page.keyboard.press('Escape');
     await page.mouse.click(10, 10);
 
+    // a finished line lingers (dimmed) briefly, not through a long silence:
+    // the last line ends at 13.0 s and nothing follows
+    const zhAt = async (t) => {
+      await page.evaluate((x) => { const v = document.querySelector('video'); v.pause(); v.currentTime = x; }, t);
+      await sleep(300);
+      return page.evaluate(() => document.querySelector('.zimu-zh').textContent.replace(/[a-zāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜü\s]/g, ''));
+    };
+    const lingering = await zhAt(14.0);
+    const cleared = await zhAt(16.5);
+    check('a finished line stays ~3 s, then clears during silence', lingering.includes('这个问题') && cleared === '', `14.0 s: "${lingering}" · 16.5 s: "${cleared}"`);
+
     // keyboard: A goes to the previous line
     await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.2; });
     await sleep(200);

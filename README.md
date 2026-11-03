@@ -71,7 +71,7 @@ npm run build      # fetches CC-CEDICT, vendors pinyin-pro,
 **Chrome / Brave:** `chrome://extensions` → Developer mode → Load unpacked →
 pick `~/Code/zimu/src`.
 
-**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.6.0.xpi` onto
+**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.6.1.xpi` onto
 the browser (unsigned add-ons need `xpinstall.signatures.required = false`
 in `about:config`), or load `src/manifest.json` temporarily from
 `about:debugging` → This Firefox.
@@ -112,7 +112,7 @@ browser (`POST /Sessions/{id}/Playing`).
 ```sh
 npm test                 # unit tests (pinyin, cues, segmentation, scheduling)
 node test/e2e/run.js     # Chrome for Testing + a fake Jellyfin and
-                         # Anthropic endpoint, 46 checks,
+                         # Anthropic endpoint, 47 checks,
                          # screenshots in ./e2e-out
 node test/e2e/run.js --firefox   # same in Firefox Developer Edition
 ```

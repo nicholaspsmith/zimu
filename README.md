@@ -36,7 +36,7 @@ npm run build      # fetches CC-CEDICT, vendors pinyin-pro
 **Chrome / Brave:** `chrome://extensions` → Developer mode → Load unpacked →
 pick `~/Code/zimu/src`.
 
-**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.1.1.xpi` onto
+**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.1.2.xpi` onto
 the browser (unsigned add-ons need `xpinstall.signatures.required = false`
 in `about:config`), or load `src/manifest.json` temporarily from
 `about:debugging` → This Firefox.

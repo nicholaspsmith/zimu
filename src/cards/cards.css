@@ -56,6 +56,17 @@ button:hover, .button:hover { border-color: var(--muted); }
 .tab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
 .pill { font-size: 12px; padding: 0 6px; border-radius: 99px; background: var(--line); color: var(--text); margin-left: 4px; }
 .tab.active .pill { background: var(--accent); color: #fff; }
+.banner {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  background: var(--mark);
+  border-bottom: 1px solid var(--line);
+}
+.banner[hidden] { display: none; }
 main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 60px; }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }

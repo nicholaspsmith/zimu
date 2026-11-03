@@ -67,6 +67,15 @@ async function playClip(source) {
 
 chrome.action.onClicked.addListener(() => { openCards(); });
 
+// After an install or update, open the flashcard page if a Jellyfin site
+// isn't granted yet (Zen/Firefox), so its "Grant access" button is one
+// click away.
+chrome.runtime.onInstalled.addListener(async () => {
+  const origins = chrome.runtime.getManifest().host_permissions || [];
+  const granted = await chrome.permissions.contains({ origins });
+  if (!granted) openCards();
+});
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   const reply = (p) => {
     p.then((v) => sendResponse({ ok: true, ...v }), (e) => sendResponse({ ok: false, error: String(e.message || e) }));

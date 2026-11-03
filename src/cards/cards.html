@@ -20,6 +20,11 @@
     <label class="button">Restore<input id="import-json" type="file" accept=".json,application/json" hidden></label>
   </header>
 
+  <div id="perm-banner" class="banner" hidden>
+    <span>Zimu isn’t allowed on <b id="perm-sites"></b> yet, so it can’t show subtitles there.</span>
+    <button id="perm-grant" class="primary">Grant access</button>
+  </div>
+
   <main>
     <section id="review" hidden>
       <div id="review-empty" class="empty" hidden>

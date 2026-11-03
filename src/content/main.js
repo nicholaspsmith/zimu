@@ -66,7 +66,7 @@
       S.dictLoading = fetch(chrome.runtime.getURL('data/cedict.u8'))
         .then((r) => r.text())
         .then((t) => { S.dict = new Z.Dict(t); S.lineCache.clear(); render(true); })
-        .catch((e) => { console.error('[zimu] dictionary failed', e); setStatus('Dictionary failed to load'); });
+        .catch((e) => { console.error('[zimu] dictionary failed', e); setStatus('Dictionary failed to load', 0); });
     }
     return S.dictLoading;
   }
@@ -613,13 +613,14 @@
         if (!S.video) return;
         await new Promise((r) => setTimeout(r, 1000));
       }
-      if (reason === 'start') setStatus('Couldn’t find what Jellyfin is playing');
+      if (reason === 'start') setStatus('Zimu couldn’t find what Jellyfin is playing', 0);
     } finally {
       S.syncing = false;
     }
   }
 
   async function loadItem(itemId, mediaSourceId) {
+    setStatus('Zimu: finding subtitles…', 0);
     S.itemId = itemId;
     S.zh = [];
     S.en = [];
@@ -630,7 +631,7 @@
     try {
       S.item = await J.item(itemId);
     } catch (e) {
-      setStatus(String(e.message || e));
+      setStatus(`Zimu: ${e.message || e}`, 0);
       return;
     }
     S.title = J.itemTitle(S.item);
@@ -639,12 +640,12 @@
     S.subs = subs;
     const { zh, en } = J.pickTracks(subs.slice());
     if (!zh) {
-      setStatus(subs.length ? 'No Chinese subtitle track on this video (⚙ to pick one)' : 'This video has no subtitles', 10000);
+      setStatus(subs.length ? 'No Chinese subtitle track on this video (⚙ to pick one)' : 'This video has no subtitles', 0);
       applySettings();
       return;
     }
     if (!zh.text) {
-      setStatus('The Chinese subtitles are images (PGS/VobSub); Zimu needs text (SRT/ASS)', 12000);
+      setStatus('The Chinese subtitles are images (PGS/VobSub); Zimu needs text (SRT/ASS)', 0);
       applySettings();
       return;
     }
@@ -678,7 +679,7 @@
       if (S.pendingClip && S.pendingClip.itemId === itemId) startPendingClip();
     } catch (e) {
       console.error('[zimu]', e);
-      setStatus(`Subtitles failed: ${e.message || e}`);
+      setStatus(`Subtitles failed: ${e.message || e}`, 0);
     }
   }
 

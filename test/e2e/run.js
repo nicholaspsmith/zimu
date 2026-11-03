@@ -125,6 +125,8 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const cardsTarget = await browser.waitForTarget((t) => t.url().includes('/cards/cards.html'), { timeout: 8000 });
     const cards = await cardsTarget.page();
     check('🗂 opens the flashcard page', !!cards, cardsTarget.url().split('/')[0]);
+    await sleep(300);
+    check('no "grant access" banner when sites are granted', await cards.evaluate(() => document.getElementById('perm-banner').hidden));
     await page.mouse.move(10, 10);
 
     // display modes: pinyin only

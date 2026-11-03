@@ -164,6 +164,34 @@ async function importJson(file) {
   }
 }
 
+// ---- site access ------------------------------------------------------------
+// Zen/Firefox treat host permissions as optional and don't grant ones added
+// by an update, so the page asks for whatever is missing.
+
+let missingOrigins = [];
+
+async function checkPermissions() {
+  const wanted = chrome.runtime.getManifest().host_permissions || [];
+  const missing = [];
+  for (const origin of wanted) {
+    if (!(await chrome.permissions.contains({ origins: [origin] }))) missing.push(origin);
+  }
+  missingOrigins = missing;
+  $('perm-sites').textContent = missing.map((o) => o.replace(/^\w+:\/\/|\/\*$/g, '')).join(', ');
+  $('perm-banner').hidden = missing.length === 0;
+}
+
+$('perm-grant').onclick = () => {
+  // must be called straight from the click, before any await
+  chrome.permissions.request({ origins: missingOrigins }).then((ok) => {
+    toast(ok ? 'Access granted — reload your Jellyfin tab.' : 'Access not granted.');
+    checkPermissions();
+  });
+};
+chrome.permissions.onAdded.addListener(checkPermissions);
+chrome.permissions.onRemoved.addListener(checkPermissions);
+checkPermissions();
+
 // ---- wiring ----------------------------------------------------------------
 
 function setView(v) {

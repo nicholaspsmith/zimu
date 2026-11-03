@@ -39,7 +39,7 @@ setInterval(async () => {
 </script></body></html>`;
 
 function start(port, videoPath) {
-  const state = { playing: false, commands: [], log: [] };
+  const state = { playing: false, commands: [], log: [], claude: [] };
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
     const p = url.pathname;
@@ -65,6 +65,28 @@ function start(port, videoPath) {
     }
     if (p === '/mock/state') { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => { Object.assign(state, JSON.parse(b)); json(200, {}); }); return; }
     if (p === '/mock/commands') { const c = state.commands; state.commands = []; return json(200, c); }
+
+    // a stand-in for api.anthropic.com's streaming Messages endpoint
+    if (req.method === 'POST' && p === '/v1/messages') {
+      let body = '';
+      req.on('data', (d) => (body += d));
+      req.on('end', async () => {
+        state.claude.push({ body: JSON.parse(body), apiKey: req.headers['x-api-key'] || req.headers.authorization, beta: req.headers['anthropic-beta'] });
+        res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+        const send = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
+        send('message_start', { message: { id: 'msg_test', type: 'message', role: 'assistant', model: 'claude-opus-5-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 50, output_tokens: 0 } } });
+        send('content_block_start', { index: 0, content_block: { type: 'text', text: '' } });
+        for (const piece of ['**Literal**: you today want go where eat rice?\n', '**Meaning**: Where do you want to eat today?\n', '**Notes**:\n- 哪儿 nǎr is the northern, erhua form of 哪里.']) {
+          await new Promise((r) => setTimeout(r, 150));
+          send('content_block_delta', { index: 0, delta: { type: 'text_delta', text: piece } });
+        }
+        send('content_block_stop', { index: 0 });
+        send('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 40 } });
+        send('message_stop', {});
+        res.end();
+      });
+      return;
+    }
 
     if (!authed) return json(401, { error: 'unauthorized' });
     if (p === '/Sessions' && url.searchParams.get('deviceId') === DEVICE) {

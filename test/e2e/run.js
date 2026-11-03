@@ -162,8 +162,47 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await page.screenshot({ path: path.join(OUT, '4-pinyin-only.png') });
     await cards.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
+    // hovering the box (not a word) explains the sentence
+    await cards.evaluate((base) => chrome.storage.local.set({ apiBaseUrl: base }), BASE);
+    await page.bringToFront();
+    await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.2; });
+    await sleep(300);
+    const explainText = () => page.evaluate(() => { const x = document.querySelector('.zimu-explain'); return x ? x.innerText : null; });
+    await page.hover('.zimu-en');
+    const noKey = await waitFor(async () => { const t = await explainText(); return t && /API key/.test(t) ? t : null; }, 4000);
+    check('without a key, hovering explains how to add one', !!noKey);
+    await page.mouse.move(10, 10);
+    await waitFor(async () => (await explainText()) === null, 3000);
+
+    await cards.bringToFront();
+    await cards.click('#tab-settings');
+    await cards.type('#api-key', 'sk-ant-test-key-1234');
+    await cards.click('#api-key-save');
+    await sleep(300);
+    const keyStatus = await cards.evaluate(() => document.getElementById('api-key-status').textContent);
+    check('API key saved from settings', keyStatus.includes('…1234'), keyStatus);
+
+    await page.bringToFront();
+    await page.hover('.zimu-en');
+    const explained = await waitFor(async () => { const t = await explainText(); return t && t.includes('erhua') ? t : null; }, 8000);
+    const call = state.claude[0];
+    check('hovering the box streams a Claude explanation', !!explained && /Literal/.test(explained), (explained || '').split('\n').slice(0, 3).join(' | '));
+    check('request: Opus 5.5, default fallbacks, line + subtitle + context', !!call && call.body.model === 'claude-opus-5-5' &&
+      call.body.fallbacks === 'default' && /server-side-fallback-2026-07-01/.test(call.beta || '') && /^(Bearer )?sk-ant-test-key-1234$/.test(call.apiKey || '') &&
+      call.body.messages[0].content.includes('你今天想去哪儿吃饭') && call.body.messages[0].content.includes('Where do you want to eat today?') &&
+      call.body.messages[0].content.includes('我觉得他还没睡着'), call ? call.body.messages[0].content.split('\n').slice(0, 4).join(' / ') : 'no request');
+    if (call && !/^(Bearer )?sk-ant-test-key-1234$/.test(call.apiKey || '')) console.log('  request:', JSON.stringify({ model: call.body.model, fallbacks: call.body.fallbacks, beta: call.beta, key: call.apiKey, headers: call.headers, effort: call.body.output_config }), '\n ', call.body.messages[0].content.replace(/\n/g, ' / '));
+    await page.screenshot({ path: path.join(OUT, '6-explain.png') });
+    await page.mouse.move(10, 10);
+    await waitFor(async () => (await explainText()) === null, 3000);
+    await page.hover('.zimu-en');
+    const again = await waitFor(async () => { const t = await explainText(); return t && /saved explanation/.test(t) ? t : null; }, 4000);
+    check('second hover uses the saved explanation (no new request)', !!again && state.claude.length === 1, `${state.claude.length} request(s)`);
+    await page.mouse.move(10, 10);
+
     // flashcard page shows the card and plays its moment
     await cards.bringToFront();
+    await cards.click('#tab-review');
     await cards.reload();
     const front = await waitFor(() => cards.evaluate(() => !document.getElementById('review-card').hidden && document.getElementById('r-hanzi').textContent));
     check('card due for review', front === '吃饭', front);

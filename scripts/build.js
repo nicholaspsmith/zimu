@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Fetches CC-CEDICT and vendors pinyin-pro into src/ so the folder can be
-// loaded as an unpacked extension. Run: npm run build [-- --refresh]
+// Fetches CC-CEDICT, vendors pinyin-pro and bundles the background script
+// into src/ so the folder can be loaded as an unpacked extension. Run: npm run build [-- --refresh]
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -34,6 +34,25 @@ async function main() {
   const ver = require('pinyin-pro/package.json').version;
   fs.writeFileSync(OUT_PINYIN, `/* pinyin-pro ${ver} (MIT) https://github.com/zh-lx/pinyin-pro */\n` + fs.readFileSync(pp, 'utf8'));
   console.log(`pinyin-pro ${ver} → ${path.relative(ROOT, OUT_PINYIN)}`);
+
+  await bundleBackground();
+}
+
+// bg/background.js (+ the Anthropic SDK) → src/background.js
+async function bundleBackground() {
+  const esbuild = require('esbuild');
+  const out = path.join(ROOT, 'src', 'background.js');
+  await esbuild.build({
+    entryPoints: [path.join(ROOT, 'bg', 'background.js')],
+    outfile: out,
+    bundle: true,
+    format: 'iife',
+    platform: 'browser',
+    target: ['chrome120', 'firefox128'],
+    legalComments: 'none',
+    banner: { js: '// Generated from bg/ by `npm run build` — edit those files, not this one.' },
+  });
+  console.log(`background → ${path.relative(ROOT, out)} (${Math.round(fs.statSync(out).size / 1024)} KB)`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

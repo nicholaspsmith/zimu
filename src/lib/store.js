@@ -16,6 +16,7 @@
     autoPause: false, // pause at the end of every line
     pauseOnHover: false,
     playWordOnClick: true, // clicking a word plays it from the video
+    explainOnHover: true, // Claude explains the line when hovering the box
     speed: 100, // playback speed in %, 60-100
     hideNativeSubs: true,
     toneColors: false,

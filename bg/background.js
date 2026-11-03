@@ -1,11 +1,14 @@
 // Background: machine translation, opening the flashcard page, and routing
 // "play this clip" to a Jellyfin tab.
-'use strict';
 
-// Chrome runs this as a service worker; Firefox loads lib/core.js first via
-// manifest background.scripts.
-if (typeof importScripts === 'function' && !globalThis.Zimu) importScripts('lib/core.js');
+// Source of src/background.js — bundled by `npm run build` (esbuild), so
+// the Anthropic SDK and lib/core.js travel inside one file that works as a
+// Chrome service worker and a Firefox background script.
+import '../src/lib/core.js';
+import { startExplainer } from './explain.js';
+
 const Z = globalThis.Zimu;
+startExplainer();
 
 const CARDS_URL = chrome.runtime.getURL('cards/cards.html');
 const mtCache = new Map();
@@ -25,13 +28,14 @@ async function translate(text) {
   return out;
 }
 
-async function openCards() {
+async function openCards(view) {
+  const url = view ? `${CARDS_URL}#${view}` : CARDS_URL;
   const [tab] = await chrome.tabs.query({ url: CARDS_URL + '*' });
   if (tab) {
-    await chrome.tabs.update(tab.id, { active: true });
+    await chrome.tabs.update(tab.id, view ? { active: true, url } : { active: true });
     await chrome.windows.update(tab.windowId, { focused: true });
   } else {
-    await chrome.tabs.create({ url: CARDS_URL });
+    await chrome.tabs.create({ url });
   }
 }
 
@@ -83,7 +87,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   };
   switch (msg && msg.type) {
     case 'translate': return reply(translate(msg.text).then((text) => ({ text })));
-    case 'openCards': return reply(openCards().then(() => ({})));
+    case 'openCards': return reply(openCards(msg.view).then(() => ({})));
     case 'playClip': return reply(playClip(msg.source));
     default: return false;
   }

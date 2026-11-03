@@ -5,7 +5,8 @@ const $ = (id) => document.getElementById(id);
 let cards = [];
 let queue = [];
 let current = null;
-let view = location.hash === '#list' ? 'list' : 'review';
+const viewFromHash = () => ({ '#list': 'list', '#settings': 'settings' })[location.hash] || 'review';
+let view = viewFromHash();
 
 function toast(text) {
   const t = $('toast');
@@ -196,13 +197,40 @@ checkPermissions();
 
 function setView(v) {
   view = v;
-  history.replaceState(null, '', v === 'list' ? '#list' : '#review');
-  $('review').hidden = v !== 'review';
-  $('list').hidden = v !== 'list';
-  $('tab-review').classList.toggle('active', v === 'review');
-  $('tab-list').classList.toggle('active', v === 'list');
-  if (v === 'review') { buildQueue(); showNext(); } else renderList();
+  history.replaceState(null, '', `#${v}`);
+  for (const name of ['review', 'list', 'settings']) {
+    $(name).hidden = v !== name;
+    $(`tab-${name}`).classList.toggle('active', v === name);
+  }
+  if (v === 'review') { buildQueue(); showNext(); } else if (v === 'list') renderList(); else renderSettings();
 }
+
+// ---- settings: Anthropic API key ---------------------------------------------
+
+async function renderSettings() {
+  const { anthropicKey, xKeys = [] } = await chrome.storage.local.get(['anthropicKey', 'xKeys']);
+  $('api-key').value = '';
+  $('api-key-status').textContent = anthropicKey ? `Key saved (…${anthropicKey.slice(-4)})` : 'No key saved';
+  $('explain-count').textContent = `${xKeys.length} saved`;
+}
+
+$('api-key-save').onclick = async () => {
+  const key = $('api-key').value.trim();
+  if (!/^sk-ant-/.test(key)) return toast('That doesn’t look like an Anthropic API key (sk-ant-…).');
+  await chrome.storage.local.set({ anthropicKey: key });
+  toast('Key saved.');
+  renderSettings();
+};
+$('api-key-remove').onclick = async () => {
+  await chrome.storage.local.remove('anthropicKey');
+  toast('Key removed.');
+  renderSettings();
+};
+$('clear-explanations').onclick = async () => {
+  const r = await chrome.runtime.sendMessage({ type: 'clearExplanations' });
+  toast(`Cleared ${(r && r.removed) || 0} saved explanations.`);
+  renderSettings();
+};
 
 function updateCounts() {
   const now = Date.now();
@@ -212,6 +240,8 @@ function updateCounts() {
 
 $('tab-review').onclick = () => setView('review');
 $('tab-list').onclick = () => setView('list');
+$('tab-settings').onclick = () => setView('settings');
+window.addEventListener('hashchange', () => setView(viewFromHash()));
 $('r-show').onclick = reveal;
 $('r-play').onclick = () => play(current);
 $('r-grades').addEventListener('click', (e) => {

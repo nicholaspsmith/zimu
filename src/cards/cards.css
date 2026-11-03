@@ -136,3 +136,18 @@ td.from .play { font-size: 13px; padding: 3px 8px; text-align: left; }
   .hanzi { font-size: 48px; }
   th:nth-child(3), td:nth-child(3) { display: none; }
 }
+
+/* settings */
+#settings { max-width: 640px; margin: 0 auto; }
+#settings h2 { font-size: 18px; margin: 0 0 6px; }
+.field { display: grid; gap: 6px; margin: 16px 0 10px; font-weight: 600; }
+.field input {
+  font: 14px ui-monospace, monospace;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: inherit;
+}
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+a { color: var(--accent); }

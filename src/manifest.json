@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Zimu — Mandarin subtitles for Jellyfin",
   "short_name": "Zimu",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Interactive Chinese subtitles in the Jellyfin web player: hanzi, pinyin, English, click-to-define, and flashcards that link back to the moment.",
   "icons": {
     "48": "icons/icon48.png",
@@ -17,7 +17,6 @@
   "background": {
     "service_worker": "background.js",
     "scripts": [
-      "lib/core.js",
       "background.js"
     ]
   },
@@ -30,7 +29,8 @@
     "http://192.0.2.10/*",
     "http://localhost/*",
     "http://127.0.0.1/*",
-    "https://translate.googleapis.com/*"
+    "https://translate.googleapis.com/*",
+    "https://api.anthropic.com/*"
   ],
   "content_scripts": [
     {

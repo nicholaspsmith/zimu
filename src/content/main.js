@@ -385,6 +385,7 @@
 
   function openPopup(content, anchorRect) {
     if (popup) popup.remove();
+    closeExplain();
     hold('popup');
     popup = h('div', { class: 'zimu-popup', onmousedown: (e) => e.stopPropagation() },
       h('button', { class: 'zimu-x', title: 'Close (Esc)', onclick: () => closePopup() }, '×'),
@@ -610,6 +611,128 @@
   lines.addEventListener('mouseenter', () => { if (S.settings.pauseOnHover) hold('hover'); });
   lines.addEventListener('mouseleave', () => release('hover'));
 
+  // ---- sentence explanations (hover the box, not a word) -------------------
+
+  let explainPanel = null;
+
+  // FNV-1a, for cache keys.
+  function hash(str) {
+    let x = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) { x ^= str.charCodeAt(i); x = Math.imul(x, 0x01000193) >>> 0; }
+    return x.toString(16).padStart(8, '0');
+  }
+
+  // Plain text with **bold** and "- " bullets → DOM (never innerHTML).
+  function renderExplanation(el, text) {
+    el.textContent = '';
+    for (const raw of text.split('\n')) {
+      const line = raw.trimEnd();
+      if (!line.trim()) continue;
+      const bullet = /^\s*[-•*]\s+/.test(line);
+      const row = h('div', { class: bullet ? 'zimu-x-bullet' : 'zimu-x-para' });
+      line.replace(/^\s*[-•*]\s+/, '').split(/(\*\*[^*]+\*\*)/).forEach((part) => {
+        if (/^\*\*[^*]+\*\*$/.test(part)) row.append(h('b', null, part.slice(2, -2)));
+        else if (part) row.append(part);
+      });
+      el.append(row);
+    }
+  }
+
+  function closeExplain() {
+    clearTimeout(S.explainTimer);
+    clearTimeout(S.explainClose);
+    S.explainTimer = 0;
+    if (explainPanel) { explainPanel.remove(); explainPanel = null; }
+  }
+  const cancelExplainClose = () => clearTimeout(S.explainClose);
+  const scheduleExplainClose = () => {
+    clearTimeout(S.explainClose);
+    S.explainClose = setTimeout(closeExplain, 500);
+  };
+
+  const EXPLAIN_ERRORS = {
+    badkey: 'Anthropic didn’t accept the API key. Check it in Zimu’s settings.',
+    rate: 'Rate-limited by Anthropic. Try again in a moment.',
+    network: 'Couldn’t reach Anthropic.',
+    refusal: 'Claude declined to explain this line.',
+  };
+
+  async function openExplain(i) {
+    const cue = S.zh[i];
+    if (!cue) return;
+    closeExplain();
+    const body = h('div', { class: 'zimu-x-body' }, h('span', { class: 'zimu-muted' }, 'Thinking…'));
+    const foot = h('div', { class: 'zimu-x-foot zimu-muted' });
+    const panelEl = h('div', {
+      class: 'zimu-explain',
+      'data-cue': i,
+      onmousedown: (e) => e.stopPropagation(),
+      onmouseenter: cancelExplainClose,
+      onmouseleave: scheduleExplainClose,
+    },
+    h('button', { class: 'zimu-x', title: 'Close (Esc)', onclick: () => closeExplain() }, '×'),
+    h('div', { class: 'zimu-x-line' }, cue.zhText.replace(/\n/g, ' ')),
+    body, foot);
+    explainPanel = panelEl;
+    root.append(panelEl);
+
+    const sentence = await sentenceFor(i);
+    const neighbours = (from, to) => S.zh.slice(Math.max(0, from), Math.max(0, to)).map((c) => c.zhText.replace(/\n/g, ' '));
+    const req = {
+      key: hash(`${S.itemId}|${cue.start.toFixed(2)}|${cue.zhText}`),
+      title: S.title,
+      line: cue.zhText.replace(/\n/g, ' '),
+      pinyin: sentence ? sentence.pinyin : '',
+      english: sentence ? sentence.en : '',
+      englishSource: typeof S.enMode === 'number' || S.enMode === 'embedded' ? 'subtitle' : 'mt',
+      before: neighbours(i - 2, i),
+      after: neighbours(i + 1, i + 3),
+    };
+    let text = '';
+    const port = chrome.runtime.connect({ name: 'explain' });
+    port.onMessage.addListener((m) => {
+      if (m.type === 'delta') {
+        text += m.text;
+        renderExplanation(body, text);
+      } else if (m.type === 'done') {
+        renderExplanation(body, m.text);
+        foot.textContent = m.cached ? 'Claude · saved explanation' : 'Claude';
+        port.disconnect();
+      } else if (m.type === 'error') {
+        body.textContent = '';
+        if (m.code === 'nokey') {
+          body.append(
+            h('div', null, 'Sentence explanations need an Anthropic API key.'),
+            h('button', { class: 'zimu-save', onclick: () => send({ type: 'openCards', view: 'settings' }) }, 'Open Zimu settings'));
+        } else {
+          body.append(EXPLAIN_ERRORS[m.code] || `Explanation failed: ${m.message || m.code}`);
+        }
+        port.disconnect();
+      }
+    });
+    port.postMessage(req);
+  }
+
+  lines.addEventListener('mousemove', (e) => {
+    const onWord = e.target && e.target.closest && e.target.closest('.zimu-w');
+    if (!S.settings.explainOnHover || popup || S.dragging || S.shown < 0 || onWord) {
+      clearTimeout(S.explainTimer);
+      S.explainTimer = 0;
+      return;
+    }
+    cancelExplainClose();
+    if (explainPanel && Number(explainPanel.dataset.cue) === S.shown) return;
+    if (!S.explainTimer) {
+      S.explainTimer = setTimeout(() => { S.explainTimer = 0; openExplain(S.shown); }, 600);
+    }
+  });
+  lines.addEventListener('mouseenter', cancelExplainClose);
+  lines.addEventListener('mouseleave', () => {
+    clearTimeout(S.explainTimer);
+    S.explainTimer = 0;
+    scheduleExplainClose();
+  });
+
   document.addEventListener('mousedown', (e) => {
     if (popup && !popup.contains(e.target)) closePopup();
     if (panel && !panel.contains(e.target) && !toolbar.contains(e.target)) togglePanel(false);
@@ -646,6 +769,7 @@
       h('label', { class: 'zimu-field' }, 'English', enSel),
       h('div', { class: 'zimu-panel-title' }, 'Behaviour'),
       check('playWordOnClick', 'Play a word from the video when I click it'),
+      check('explainOnHover', 'Explain the sentence when I hover the box (not a word)'),
       check('pauseOnHover', 'Pause while the mouse is over the subtitles'),
       check('autoPause', 'Pause at the end of each line (Q)'),
       check('hideNativeSubs', 'Hide Jellyfin’s own subtitles'),
@@ -850,6 +974,7 @@
     S.zhTrack = null;
     S.holds.clear();
     closePopup();
+    closeExplain();
     togglePanel(false);
     root.classList.add('zimu-hidden');
     document.documentElement.classList.remove('zimu-hide-native');
@@ -887,7 +1012,7 @@
       a: () => gotoLine('prev'), s: () => gotoLine('repeat'), d: () => gotoLine('next'), q: toggleAutoPause,
       '[': () => setSpeed(sp - 1), ']': () => setSpeed(sp + 1), '{': () => setSpeed(sp - 5), '}': () => setSpeed(sp + 5),
     }[k];
-    if (e.key === 'Escape' && (popup || panel)) { closePopup(); togglePanel(false); }
+    if (e.key === 'Escape' && (popup || panel || explainPanel)) { closePopup(); togglePanel(false); closeExplain(); }
     else if (act) act();
     else return;
     e.preventDefault();

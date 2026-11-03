@@ -16,15 +16,16 @@ Zen/Firefox.
   covers most misses. Turn it off under ⚙ if you only want definitions.
 - **Drag across words** (or shift-click) to look up a phrase: machine
   translation and a word-by-word breakdown.
-- **Hover the subtitle box (not a word)** and Claude explains the line: a
+- **Click the subtitle box (not a word)** and Claude explains the line: a
   literal gloss, what it really means in context, how the English subtitle
   got there (and what it loosened or missed), and any slang, idioms or
   grammar worth knowing (小鲜肉 "little fresh meat" → a handsome young
   actor). Cut-off lines get a best guess at where they were heading.
   Opening one pauses the video. The panel (right-hand side) stays while that
   line is on screen — through playback, word popups and mouse movement — and
-  comes back whenever you return to the line; × or Esc dismisses it until
-  then. Scrolling it never changes Jellyfin's volume.
+  comes back whenever you return to the line. × or Esc closes it for good;
+  click the line again to bring it back (from the save, no new charge).
+  Scrolling it never changes Jellyfin's volume.
   Needs your Anthropic API key (🗂 → Settings); uses Claude Opus 5.5 at low
   effort, about 1¢ per new line, and each line is explained once.
 - **Sentences** (flashcard page): every explained line, with its pinyin,
@@ -45,6 +46,7 @@ Zen/Firefox.
   through the range (it speeds up the longer you hold), or use **[ ]** (1%)
   and **{ }** (5%). Pitch is kept, so voices sound natural, just slower.
 - **Colour by tone** (⚙): 1 blue, 2 green, 3 orange, 4 red, neutral grey.
+- **Look** (⚙): text and background opacity, size and height.
 - Hovering the subtitles doesn't pause (turn "Pause while the mouse is over
   the subtitles" on under ⚙ if you want it).
 
@@ -69,7 +71,7 @@ npm run build      # fetches CC-CEDICT, vendors pinyin-pro,
 **Chrome / Brave:** `chrome://extensions` → Developer mode → Load unpacked →
 pick `~/Code/zimu/src`.
 
-**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.5.0.xpi` onto
+**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.6.0.xpi` onto
 the browser (unsigned add-ons need `xpinstall.signatures.required = false`
 in `about:config`), or load `src/manifest.json` temporarily from
 `about:debugging` → This Firefox.
@@ -110,7 +112,7 @@ browser (`POST /Sessions/{id}/Playing`).
 ```sh
 npm test                 # unit tests (pinyin, cues, segmentation, scheduling)
 node test/e2e/run.js     # Chrome for Testing + a fake Jellyfin and
-                         # Anthropic endpoint, 42 checks,
+                         # Anthropic endpoint, 46 checks,
                          # screenshots in ./e2e-out
 node test/e2e/run.js --firefox   # same in Firefox Developer Edition
 ```

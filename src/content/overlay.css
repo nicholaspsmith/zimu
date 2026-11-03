@@ -92,13 +92,16 @@ html.zimu-hide-native video::cue {
   max-width: min(92vw, 1400px);
   padding: 6px 14px 8px;
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, var(--zimu-bg-alpha, 0.75));
   text-align: center;
   user-select: none;
   -webkit-user-select: none;
 }
 .zimu-lines:has(.zimu-zh:empty):has(.zimu-en:empty) { display: none; }
-.zimu-lines.zimu-past { opacity: 0.55; }
+.zimu-zh, .zimu-en { opacity: var(--zimu-text-alpha, 1); }
+/* the line just finished stays up, slightly dimmed, until the next starts */
+.zimu-lines.zimu-past .zimu-zh,
+.zimu-lines.zimu-past .zimu-en { opacity: calc(var(--zimu-text-alpha, 1) * 0.8); }
 
 .zimu-zh { font-size: var(--zimu-size); line-height: 1.25; }
 .zimu-row { margin: 2px 0; }
@@ -248,7 +251,8 @@ html.zimu-hide-native video::cue {
 .zimu-panel-title:first-child { margin-top: 0; }
 .zimu-row-flex { display: flex; gap: 14px; }
 .zimu-check { display: flex; gap: 6px; align-items: center; margin: 3px 0; cursor: pointer; }
-.zimu-field, .zimu-range { display: grid; grid-template-columns: 70px 1fr; gap: 8px; align-items: center; margin: 4px 0; }
+.zimu-field, .zimu-range { display: grid; grid-template-columns: 112px 1fr; gap: 8px; align-items: center; margin: 4px 0; }
+.zimu-range span { font-variant-numeric: tabular-nums; }
 .zimu-field select {
   background: #2b2e36;
   color: #e8eaee;

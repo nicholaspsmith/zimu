@@ -12,11 +12,13 @@
     showPinyin: true,
     showEnglish: true,
     fontSize: 34, // px for hanzi
+    textOpacity: 100, // % — subtitle text
+    bgOpacity: 75, // % — the box behind the subtitles
     bottom: 12, // % of the window height
     autoPause: false, // pause at the end of every line
     pauseOnHover: false,
     playWordOnClick: true, // clicking a word plays it from the video
-    explainOnHover: true, // Claude explains the line when hovering the box
+    explainOnHover: true, // Claude explains the line when the box (not a word) is clicked
     speed: 100, // playback speed in %, 60-100
     hideNativeSubs: true,
     toneColors: false,
@@ -92,9 +94,15 @@
         .map(([, v]) => v)
         .sort((a, b) => (b.created || 0) - (a.created || 0));
     },
-    async has(key) {
+    async get(key) {
       const r = await area().get(`s:${key}`);
-      return !!r[`s:${key}`];
+      return r[`s:${key}`] || null;
+    },
+    // × on the overlay: don't bring this one back on its own any more.
+    async setDismissed(key, dismissed) {
+      const rec = await Sentences.get(key);
+      if (!rec || !!rec.dismissed === dismissed) return;
+      await area().set({ [`s:${key}`]: { ...rec, dismissed } });
     },
     async remove(key) {
       await area().remove(`s:${key}`);

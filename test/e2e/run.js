@@ -160,13 +160,14 @@ async function waitFor(fn, ms = 8000, step = 100) {
       return {
         below: tb.getBoundingClientRect().top >= lines.bottom,
         labels: [...tb.querySelectorAll('button')].map((b) => b.title.split(' (')[0]),
-        inBar: !!osd && osd.parentElement.matches('.osdControls .buttons') && osd.nextElementSibling.matches('.btnVideoOsdSettings'),
+        inBar: !!osd && osd.parentElement.matches('.osdControls .buttons') && osd.nextElementSibling.matches('.btnVideoOsdSettings') &&
+          !osd.closest('.hide') && osd.getBoundingClientRect().width > 0,
         fontPx: parseFloat(getComputedStyle(tb.querySelector('button')).fontSize),
       };
     });
     check('toolbar sits under the subtitles, 20% larger, play/pause instead of repeat', layout.below && layout.fontPx === 15.6 &&
       JSON.stringify(layout.labels) === JSON.stringify(['Previous line', 'Play / pause', 'Next line', 'Pause at the end of each line']), JSON.stringify(layout));
-    check('speed, settings and flashcards are in Jellyfin’s bar before its ⚙', layout.inBar);
+    check('speed, settings and flashcards are in the visible Jellyfin bar (not a cached hidden page), before its ⚙', layout.inBar);
     await page.hover('.zimu-en');
     await page.mouse.move(640, 760);
     await page.hover('.zimu-lines .zimu-p');
@@ -246,6 +247,25 @@ async function waitFor(fn, ms = 8000, step = 100) {
       return p && { above: p.getBoundingClientRect().bottom <= b.getBoundingClientRect().top, right: Math.round(p.getBoundingClientRect().right - b.getBoundingClientRect().right) };
     });
     check('⚙ opens settings above the button', !!panelPos && panelPos.above && Math.abs(panelPos.right) <= 2, JSON.stringify(panelPos));
+    // text and background opacity sliders (defaults 100% / 75%)
+    const look = () => page.evaluate(() => ({ text: getComputedStyle(document.querySelector('.zimu-zh')).opacity, bg: getComputedStyle(document.querySelector('.zimu-lines')).backgroundColor }));
+    const lookBefore = await look();
+    await page.evaluate(() => {
+      const set = (label, v) => {
+        const input = [...document.querySelectorAll('.zimu-panel .zimu-range')].find((l) => l.textContent.startsWith(label)).querySelector('input');
+        input.value = v;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      set('Text', 60);
+      set('Background', 90);
+    });
+    await sleep(200);
+    const lookAfter = await look();
+    await sleep(600); // let it save
+    const sliderLabels = await page.evaluate(() => [...document.querySelectorAll(".zimu-panel .zimu-range span")].map((x) => x.textContent).join(', '));
+    check('opacity sliders: text and background', lookBefore.text === '1' && lookBefore.bg === 'rgba(0, 0, 0, 0.75)' &&
+      lookAfter.text === '0.6' && lookAfter.bg === 'rgba(0, 0, 0, 0.9)', `${JSON.stringify(lookBefore)} → ${JSON.stringify(lookAfter)} [${sliderLabels}]`);
+    await cardsSet({ textOpacity: 100, bgOpacity: 75 });
     await page.keyboard.press('Escape');
     await page.mouse.click(10, 10);
 
@@ -284,7 +304,7 @@ async function waitFor(fn, ms = 8000, step = 100) {
       tones[4] === 'rgb(255, 92, 92)' && tones[5] === 'rgb(200, 200, 200)', JSON.stringify(tones));
     await cards.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
-    // hovering the box (not a word) explains the sentence
+    // clicking the box (not a word) explains the sentence; hovering doesn't
     await cards.evaluate((base) => chrome.storage.local.set({ apiBaseUrl: base }), BASE);
     await page.bringToFront();
     const video = (fn) => page.evaluate(fn);
@@ -292,6 +312,9 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await sleep(300);
     const explainText = () => page.evaluate(() => { const x = document.querySelector('.zimu-explain'); return x ? x.innerText : null; });
     await page.hover('.zimu-en');
+    await sleep(1000);
+    check('hovering the box doesn’t open an explanation', (await explainText()) === null);
+    await page.click('.zimu-en');
     const noKey = await waitFor(async () => { const t = await explainText(); return t && /API key/.test(t) ? t : null; }, 4000);
     check('without a key, hovering explains how to add one', !!noKey);
     await page.keyboard.press('Escape');
@@ -310,10 +333,10 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await page.mouse.move(10, 10);
     await video(() => { const v = document.querySelector('video'); v.currentTime = 4.0; v.play(); });
     await sleep(200);
-    await page.hover('.zimu-en');
+    await page.click('.zimu-en');
     const explained = await waitFor(async () => { const t = await explainText(); return t && t.includes('erhua') ? t : null; }, 8000);
     const call = state.claude[0];
-    check('hovering the box streams a Claude explanation', !!explained && /Literal/.test(explained), (explained || '').split('\n').slice(0, 3).join(' | '));
+    check('clicking the box streams a Claude explanation', !!explained && /Literal/.test(explained), (explained || '').split('\n').slice(0, 3).join(' | '));
     check('opening an explanation pauses the video', await video(() => document.querySelector('video').paused));
     check('request: Opus 5.5, default fallbacks, line + subtitle + context', !!call && call.body.model === 'claude-opus-5-5' &&
       call.body.fallbacks === 'default' && /server-side-fallback-2026-07-01/.test(call.beta || '') && /^(Bearer )?sk-ant-test-key-1234$/.test(call.apiKey || '') &&
@@ -357,6 +380,31 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const cameBack = await waitFor(async () => { const t = await explainText(); return t && t.includes('erhua') && /Saved to Sentences/.test(t) ? t : null; }, 4000);
     check('next line hides it; going back brings it back from the save', !!gone && !!cameBack && state.claude.length === 1, `gone:${!!gone} back:${!!cameBack} requests:${state.claude.length}`);
     check('…without pausing again', await video(() => document.querySelector('video').paused), 'paused by the seek, not re-paused');
+
+    // x dismisses it for good: going away and back doesn't bring it back,
+    // clicking the line does (from the save, no new request)
+    await page.click('.zimu-explain .zimu-x');
+    await sleep(200);
+    await video(() => { document.querySelector('video').currentTime = 6.8; });
+    await sleep(400);
+    await video(() => { document.querySelector('video').currentTime = 4.3; });
+    await sleep(1200);
+    const stayedAway = (await explainText()) === null;
+    await page.click('.zimu-en');
+    const reopened = await waitFor(async () => { const t = await explainText(); return t && /Saved to Sentences/.test(t) ? t : null; }, 4000);
+    check('× dismisses it; returning doesn’t reopen it, clicking the line does (no new request)', stayedAway && !!reopened && state.claude.length === 1,
+      `stayed away:${stayedAway} reopened:${!!reopened} requests:${state.claude.length}`);
+    // drag-selecting a phrase doesn't also open an explanation
+    await page.click('.zimu-explain .zimu-x');
+    const ws = await page.$$('.zimu-w');
+    const wa = await ws[1].boundingBox();
+    const wb = await ws[3].boundingBox();
+    await page.mouse.move(wa.x + wa.width / 2, wa.y + wa.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(wb.x + wb.width / 2, wb.y + wb.height / 2, { steps: 5 });
+    await page.mouse.up();
+    await sleep(500);
+    check('drag-selecting a phrase opens only the phrase popup', await page.evaluate(() => !!document.querySelector('.zimu-popup') && !document.querySelector('.zimu-explain')));
     await page.keyboard.press('Escape');
 
     // every explanation lands in the flashcards' Sentences tab

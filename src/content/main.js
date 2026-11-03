@@ -33,6 +33,7 @@
     weePaused: false,
     saved: new Set(),
     mt: new Map(), // zh text -> english | Promise
+    dismissedKeys: new Set(), // explanations closed with × this session
     status: '',
     statusTimer: 0,
     syncing: false,
@@ -266,11 +267,25 @@
     speedBox.classList.toggle('zimu-on', n !== 100);
   }
 
+  // Jellyfin keeps recently visited pages in the document, hidden with
+  // .hide, so an older player page's bar can come first. Use the bar of the
+  // page on screen (the bar itself also gets .hide while the controls are
+  // tucked away, so that one doesn't count).
+  function activeOsdBar() {
+    const bars = [...document.querySelectorAll('.videoOsdBottom-maincontrols .osdControls .buttons, .osdControls .buttons')];
+    const onShownPage = (bar) => {
+      for (let el = bar.parentElement; el && el !== document.body; el = el.parentElement) {
+        if (el.classList.contains('hide') && !el.classList.contains('videoOsdBottom')) return false;
+      }
+      return true;
+    };
+    const shown = bars.filter(onShownPage);
+    return shown[shown.length - 1] || null;
+  }
+
   function mountOsd() {
-    if (osdGroup.isConnected) return;
-    const bar = document.querySelector('.videoOsdBottom-maincontrols .osdControls .buttons') ||
-      document.querySelector('.osdControls .buttons');
-    if (!bar) return;
+    const bar = activeOsdBar();
+    if (!bar || osdGroup.parentElement === bar) return;
     const before = bar.querySelector(':scope > .btnVideoOsdSettings');
     bar.insertBefore(osdGroup, before || null);
     // Jellyfin draws icons from CSS classes; fall back to the font's ligature
@@ -292,6 +307,8 @@
     const st = S.settings;
     root.style.setProperty('--zimu-size', `${st.fontSize}px`);
     root.style.setProperty('--zimu-bottom', `${st.bottom}vh`);
+    root.style.setProperty('--zimu-text-alpha', String(st.textOpacity / 100));
+    root.style.setProperty('--zimu-bg-alpha', String(st.bgOpacity / 100));
     root.classList.toggle('zimu-tones', !!st.toneColors);
     document.documentElement.classList.toggle('zimu-hide-native', !!st.hideNativeSubs && !!S.video && S.zhTrack != null);
     autoBtn.classList.toggle('zimu-on', !!st.autoPause);
@@ -376,7 +393,6 @@
     const cue = S.zh[idx];
     renderZh(cue);
     renderEn(idx);
-    if (idx !== S.explainDismissed) S.explainDismissed = -1; // a dismissal lasts while its line is up
     syncExplain();
   }
 
@@ -443,19 +459,29 @@
     if (Math.abs(v.playbackRate - rate) > 0.001) v.playbackRate = rate;
   }
 
-  // Applies at once; saves once the adjusting stops, so quick key presses
-  // aren't undone by storage echoes of earlier values.
+  // Settings changed by dragging or key-repeat apply at once and are saved
+  // once the adjusting stops, so storage echoes of earlier values can't
+  // undo newer ones.
+  const pendingSave = {};
+  let saveTimer = 0;
+  function setLocal(key, value) {
+    S.settings[key] = value;
+    pendingSave[key] = value;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      const patch = { ...pendingSave };
+      Z.Settings.set(patch).finally(() => {
+        for (const k of Object.keys(patch)) if (pendingSave[k] === patch[k]) delete pendingSave[k];
+      });
+    }, 400);
+  }
+
   function setSpeed(n) {
     const speed = clampSpeed(n);
-    S.settings.speed = speed;
+    setLocal('speed', speed);
     applySpeed();
     paintSpeed(speed);
     setStatus(`Speed ${speed}%`, 1500);
-    S.speedPending = true;
-    clearTimeout(S.speedTimer);
-    S.speedTimer = setTimeout(() => {
-      Z.Settings.set({ speed: S.settings.speed }).finally(() => { S.speedPending = false; });
-    }, 400);
   }
 
   function gotoLine(which) {
@@ -698,6 +724,8 @@
   window.addEventListener('mouseup', (e) => {
     if (!S.dragging) return;
     S.dragging = false;
+    S.suppressClick = true; // the click that follows belongs to this word/phrase pick
+    setTimeout(() => { S.suppressClick = false; }, 0);
     const { a, b } = S.sel;
     const [lo, hi] = a <= b ? [a, b] : [b, a];
     const els = [...zhBox.querySelectorAll('.zimu-sel')];
@@ -767,10 +795,11 @@
     }
   }
 
-  // An explanation stays up while its line is on screen: playback, word
-  // popups and mouse movement don't close it; a different line does, and
-  // coming back to an explained line shows it again (from the saved copy).
-  // × / Esc dismiss it until the line comes round again.
+  // Clicking the subtitle box (not a word) explains the line. The panel stays
+  // up while its line is on screen: playback, word popups and mouse movement
+  // don't close it; a different line does, and coming back to an explained
+  // line shows it again (from the saved copy). × / Esc dismiss it for good —
+  // it only comes back when the line is clicked again.
 
   const explainJobs = new Map(); // key → { text, state, cached, error, subs }
 
@@ -780,8 +809,6 @@
   }
 
   function closeExplain() {
-    clearTimeout(S.explainTimer);
-    S.explainTimer = 0;
     if (explainPanel) {
       if (explainPanel.unsub) explainPanel.unsub();
       explainPanel.remove();
@@ -790,7 +817,11 @@
   }
 
   function dismissExplain() {
-    if (explainPanel) S.explainDismissed = Number(explainPanel.dataset.cue);
+    if (explainPanel) {
+      const key = explainPanel.dataset.key;
+      S.dismissedKeys.add(key);
+      Z.Sentences.setDismissed(key, true); // remembered with the saved sentence
+    }
     closeExplain();
   }
 
@@ -851,7 +882,7 @@
     const key = explainKey(i);
     if (!cue || !key) return;
     closeExplain();
-    S.explainDismissed = -1;
+    if (S.dismissedKeys.delete(key) || pause) Z.Sentences.setDismissed(key, false);
     if (pause && S.video && !S.video.paused) S.video.pause();
 
     const body = h('div', { class: 'zimu-x-body' });
@@ -859,7 +890,7 @@
       h('button', { class: 'zimu-btn', title: 'Replay this line (S)', onclick: () => gotoLine('repeat') }, '↻ Replay line'),
       h('span', { class: 'zimu-muted zimu-x-status' }));
     const pinyin = cue.zhText.split('\n').map((l) => tokenize(l).filter((t) => t.han).map(tokenPinyin).join(' ')).join(' / ');
-    const panelEl = h('div', { class: 'zimu-explain', 'data-cue': i, onmousedown: (e) => e.stopPropagation() },
+    const panelEl = h('div', { class: 'zimu-explain', 'data-cue': i, 'data-key': key, onmousedown: (e) => e.stopPropagation() },
       h('button', { class: 'zimu-x', title: 'Close (Esc)', onclick: () => dismissExplain() }, '×'),
       h('div', { class: 'zimu-x-line' }, cue.zhText.replace(/\n/g, ' ')),
       h('div', { class: 'zimu-x-py' }, pinyin),
@@ -897,28 +928,24 @@
   async function syncExplain() {
     const i = S.shown;
     if (explainPanel && Number(explainPanel.dataset.cue) !== i) closeExplain();
-    if (i < 0 || explainPanel || S.explainDismissed === i || !S.settings.explainOnHover) return;
+    if (i < 0 || explainPanel || !S.settings.explainOnHover) return;
     const key = explainKey(i);
-    if (!key) return;
-    const known = explainJobs.has(key) || await Z.Sentences.has(key);
-    if (known && S.shown === i && !explainPanel && S.explainDismissed !== i) openExplain(i);
+    if (!key || S.dismissedKeys.has(key)) return;
+    let known = explainJobs.has(key);
+    if (!known) {
+      const saved = await Z.Sentences.get(key);
+      known = !!saved && !saved.dismissed;
+    }
+    if (known && S.shown === i && !explainPanel && !S.dismissedKeys.has(key)) openExplain(i);
   }
 
-  lines.addEventListener('mousemove', (e) => {
-    const onWord = e.target && e.target.closest && e.target.closest('.zimu-w');
-    if (!S.settings.explainOnHover || popup || S.dragging || S.shown < 0 || onWord) {
-      clearTimeout(S.explainTimer);
-      S.explainTimer = 0;
-      return;
-    }
+  // A click on the box that isn't on a word (the English line, punctuation,
+  // the space around the words) explains the line.
+  lines.addEventListener('click', (e) => {
+    if (!S.settings.explainOnHover || S.shown < 0 || S.suppressClick) return;
+    if (e.target.closest && e.target.closest('.zimu-w')) return;
     if (explainPanel && Number(explainPanel.dataset.cue) === S.shown) return;
-    if (!S.explainTimer) {
-      S.explainTimer = setTimeout(() => { S.explainTimer = 0; openExplain(S.shown, { pause: true }); }, 600);
-    }
-  });
-  lines.addEventListener('mouseleave', () => {
-    clearTimeout(S.explainTimer);
-    S.explainTimer = 0;
+    openExplain(S.shown, { pause: true });
   });
 
   document.addEventListener('mousedown', (e) => {
@@ -949,8 +976,16 @@
     h('option', { value: 'mt', selected: S.enMode === 'mt' }, 'Machine translation'),
     h('option', { value: 'none', selected: S.enMode === 'none' }, 'None'),
     zhOpts.map((s) => h('option', { value: s.index, selected: s.index === S.enMode }, s.title)));
-    const range = (key, label, min, max) => h('label', { class: 'zimu-range' }, label,
-      h('input', { type: 'range', min, max, value: st[key], oninput: (e) => Z.Settings.set({ [key]: Number(e.target.value) }) }));
+    const range = (key, label, min, max, unit = '') => {
+      const text = h('span', null, `${label} ${st[key]}${unit}`);
+      return h('label', { class: 'zimu-range' }, text,
+        h('input', { type: 'range', min, max, value: st[key], oninput: (e) => {
+          const v = Number(e.target.value);
+          text.textContent = `${label} ${v}${unit}`;
+          setLocal(key, v);
+          applySettings();
+        } }));
+    };
     panel = h('div', { class: 'zimu-panel', onmousedown: (e) => e.stopPropagation() },
       h('div', { class: 'zimu-panel-title' }, 'Show'),
       h('div', { class: 'zimu-row-flex' }, check('showHanzi', 'Hanzi'), check('showPinyin', 'Pinyin'), check('showEnglish', 'English')),
@@ -959,14 +994,17 @@
       h('label', { class: 'zimu-field' }, 'English', enSel),
       h('div', { class: 'zimu-panel-title' }, 'Behaviour'),
       check('playWordOnClick', 'Play from a word when I click it'),
-      check('explainOnHover', 'Explain the sentence when I hover the box (not a word)'),
+      check('explainOnHover', 'Explain the sentence when I click the box (not a word)'),
       check('pauseOnHover', 'Pause while the mouse is over the subtitles'),
       check('autoPause', 'Pause at the end of each line (Q)'),
       check('hideNativeSubs', 'Hide Jellyfin’s own subtitles'),
       check('toneColors', 'Colour by tone'),
       check('machineTranslate', 'Machine-translate when there is no English track'),
-      range('fontSize', 'Size', 18, 64),
-      range('bottom', 'Height', 2, 60),
+      h('div', { class: 'zimu-panel-title' }, 'Look'),
+      range('textOpacity', 'Text', 30, 100, '%'),
+      range('bgOpacity', 'Background', 0, 100, '%'),
+      range('fontSize', 'Size', 18, 64, 'px'),
+      range('bottom', 'Height', 2, 60, '%'),
       h('div', { class: 'zimu-muted' }, 'Keys: A previous · S repeat · D next · Q auto-pause · [ ] speed ±1% ({ } ±5%) · Esc close'));
     root.append(panel);
     const a = S.panelAnchor;
@@ -1005,7 +1043,6 @@
   async function loadItem(itemId, mediaSourceId) {
     setStatus('Zimu: finding subtitles…', 0);
     closeExplain();
-    S.explainDismissed = -1;
     S.itemId = itemId;
     S.zh = [];
     S.en = [];
@@ -1226,9 +1263,8 @@
   Z.Cards.onChange((cards) => { S.saved = new Set(cards.map((c) => c.hanzi)); render(true); });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.settings) {
-      const speed = S.settings.speed;
-      S.settings = { ...Z.DEFAULT_SETTINGS, ...changes.settings.newValue };
-      if (S.speedPending) S.settings.speed = speed; // a newer local value is waiting to save
+      // values still waiting to save are newer than this echo
+      S.settings = { ...Z.DEFAULT_SETTINGS, ...changes.settings.newValue, ...pendingSave };
       applySettings();
       if (panel && !panel.contains(document.activeElement)) { togglePanel(false); togglePanel(true); }
     }

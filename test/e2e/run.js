@@ -57,6 +57,16 @@ async function waitFor(fn, ms = 8000, step = 100) {
   try {
     if (FIREFOX) await browser.installExtension(EXT);
 
+    // change Zimu settings from a short-lived extension page
+    async function cardsSet(patch) {
+      const sw = await browser.waitForTarget((t) => /^(chrome|moz)-extension:/.test(t.url()), { timeout: 8000 });
+      const tmp = await browser.newPage();
+      await tmp.goto(`${sw.url().split('/').slice(0, 3).join('/')}/cards/cards.html#settings`);
+      await tmp.evaluate((p) => Zimu.Settings.set(p), patch);
+      await tmp.close();
+      await page.bringToFront();
+      await sleep(300);
+    }
     const page = await browser.newPage();
     page.on('console', (m) => { if (/zimu/i.test(m.text())) console.log('  [page]', m.text()); });
     page.on('pageerror', (e) => console.log('  [pageerror]', e.message));
@@ -88,9 +98,29 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const pop = await waitFor(() => page.evaluate(() => document.querySelector('.zimu-popup') && document.querySelector('.zimu-popup').innerText));
     check('word popup with definition', !!pop && /eat/i.test(pop) && pop.includes('chīfàn'), (pop || '').split('\n').slice(0, 4).join(' | '));
     await page.screenshot({ path: path.join(OUT, '2-word-popup.png') });
-    // clicking 吃饭 played its estimated moment (≈4.79–5.91 s in a 3.5–6.0 line)
-    const heard = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 4.5 ? v.currentTime : null; }), 4000, 50);
-    check('clicking a word plays it and stops after it', heard != null && heard >= 5.8 && heard < 6.1, String(heard));
+    // clicking 吃饭 jumped to its estimated moment (≈4.79 s in a 3.5–6.0 line)
+    // and, with auto-pause off, kept playing past the line
+    const heard = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return !v.paused && v.currentTime > 4.6 && v.currentTime < 5.2 ? v.currentTime : null; }), 3000, 30);
+    const carried = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return !v.paused && v.currentTime > 6.2 ? v.currentTime : null; }), 3000, 50);
+    check('clicking a word plays from it and (auto-pause off) keeps going', heard != null && carried != null, `${heard} → ${carried}`);
+    // ▶ Hear it plays just the word
+    await page.evaluate(() => [...document.querySelectorAll('.zimu-popup .zimu-btn')].find((b) => b.textContent.includes('Hear it')).click());
+    const wordOnly = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 4.6 ? v.currentTime : null; }), 4000, 50);
+    check('▶ Hear it plays just the word and stops', wordOnly != null && wordOnly >= 5.8 && wordOnly < 6.1, String(wordOnly));
+    // with auto-pause on, a word click stops at the end of the line
+    await cardsSet({ autoPause: true });
+    const wAuto = await page.$$('.zimu-w');
+    await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.2; });
+    await sleep(200);
+    await wAuto[2].click(); // 想
+    const lineEnd = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 4.5 ? v.currentTime : null; }), 4000, 50);
+    check('…with auto-pause on it stops at the end of the line', lineEnd != null && lineEnd >= 5.85 && lineEnd < 6.05, String(lineEnd));
+    await cardsSet({ autoPause: false });
+    await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.2; });
+    await sleep(200);
+    await (await page.$$('.zimu-w'))[5].click();
+    await waitFor(() => page.evaluate(() => !!document.querySelector('.zimu-popup')), 2000);
+    await page.evaluate(() => document.querySelector('video').pause());
     await page.click('.zimu-save');
     const saved = await waitFor(() => page.evaluate(() => document.querySelector('.zimu-save').textContent.includes('Saved')), 8000);
     check('save to flashcards', !!saved);
@@ -198,8 +228,8 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await sleep(700);
     const after700 = Number(await speedValue());
     await sleep(800);
-    const after1500 = Number(await speedValue());
     await page.mouse.up();
+    const after1500 = Number(await speedValue());
     await sleep(400);
     const settled = Number(await speedValue());
     check('click − steps 1%; holding it accelerates', oneClick === '99' && after700 >= 94 && after700 <= 97 &&
@@ -250,21 +280,22 @@ async function waitFor(fn, ms = 8000, step = 100) {
       const el = document.querySelector(`.zimu-zh .zimu-t${n}`);
       return [n, el ? getComputedStyle(el).color : null];
     })));
-    check('tone colours: 1 blue, 2 yellow, 3 brownish orange, 4 red, neutral grey', tones[1] === 'rgb(90, 169, 255)' && tones[2] === 'rgb(255, 216, 77)' && tones[3] === 'rgb(217, 138, 61)' &&
+    check('tone colours: 1 blue, 2 green, 3 orange, 4 red, neutral grey', tones[1] === 'rgb(90, 169, 255)' && tones[2] === 'rgb(95, 208, 104)' && tones[3] === 'rgb(255, 154, 46)' &&
       tones[4] === 'rgb(255, 92, 92)' && tones[5] === 'rgb(200, 200, 200)', JSON.stringify(tones));
     await cards.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
     // hovering the box (not a word) explains the sentence
     await cards.evaluate((base) => chrome.storage.local.set({ apiBaseUrl: base }), BASE);
     await page.bringToFront();
-    await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.2; });
+    const video = (fn) => page.evaluate(fn);
+    await video(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.2; });
     await sleep(300);
     const explainText = () => page.evaluate(() => { const x = document.querySelector('.zimu-explain'); return x ? x.innerText : null; });
     await page.hover('.zimu-en');
     const noKey = await waitFor(async () => { const t = await explainText(); return t && /API key/.test(t) ? t : null; }, 4000);
     check('without a key, hovering explains how to add one', !!noKey);
-    await page.mouse.move(10, 10);
-    await waitFor(async () => (await explainText()) === null, 3000);
+    await page.keyboard.press('Escape');
+    check('Esc dismisses the explanation', await waitFor(async () => (await explainText()) === null, 2000));
 
     await cards.bringToFront();
     await cards.click('#tab-settings');
@@ -274,23 +305,70 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const keyStatus = await cards.evaluate(() => document.getElementById('api-key-status').textContent);
     check('API key saved from settings', keyStatus.includes('…1234'), keyStatus);
 
+    // opening one pauses playback
     await page.bringToFront();
+    await page.mouse.move(10, 10);
+    await video(() => { const v = document.querySelector('video'); v.currentTime = 4.0; v.play(); });
+    await sleep(200);
     await page.hover('.zimu-en');
     const explained = await waitFor(async () => { const t = await explainText(); return t && t.includes('erhua') ? t : null; }, 8000);
     const call = state.claude[0];
     check('hovering the box streams a Claude explanation', !!explained && /Literal/.test(explained), (explained || '').split('\n').slice(0, 3).join(' | '));
+    check('opening an explanation pauses the video', await video(() => document.querySelector('video').paused));
     check('request: Opus 5.5, default fallbacks, line + subtitle + context', !!call && call.body.model === 'claude-opus-5-5' &&
       call.body.fallbacks === 'default' && /server-side-fallback-2026-07-01/.test(call.beta || '') && /^(Bearer )?sk-ant-test-key-1234$/.test(call.apiKey || '') &&
       call.body.messages[0].content.includes('你今天想去哪儿吃饭') && call.body.messages[0].content.includes('Where do you want to eat today?') &&
       call.body.messages[0].content.includes('我觉得他还没睡着'), call ? call.body.messages[0].content.split('\n').slice(0, 4).join(' / ') : 'no request');
-    if (call && !/^(Bearer )?sk-ant-test-key-1234$/.test(call.apiKey || '')) console.log('  request:', JSON.stringify({ model: call.body.model, fallbacks: call.body.fallbacks, beta: call.beta, key: call.apiKey, headers: call.headers, effort: call.body.output_config }), '\n ', call.body.messages[0].content.replace(/\n/g, ' / '));
     await page.screenshot({ path: path.join(OUT, '6-explain.png') });
+
+    // it stays: mouse away, a word popup, playing within the line
     await page.mouse.move(10, 10);
-    await waitFor(async () => (await explainText()) === null, 3000);
-    await page.hover('.zimu-en');
-    const again = await waitFor(async () => { const t = await explainText(); return t && /saved explanation/.test(t) ? t : null; }, 4000);
-    check('second hover uses the saved explanation (no new request)', !!again && state.claude.length === 1, `${state.claude.length} request(s)`);
+    await sleep(1200);
+    const stays = !!(await explainText());
+    const words2 = await page.$$('.zimu-w');
+    await words2[words2.length - 1].click(); // 吃饭: popup + plays the word
+    await sleep(300);
+    const both = await page.evaluate(() => !!document.querySelector('.zimu-popup') && !!document.querySelector('.zimu-explain'));
+    await page.keyboard.press('Escape'); // closes the popup only
+    await sleep(200);
+    const afterEsc = await page.evaluate(() => !document.querySelector('.zimu-popup') && !!document.querySelector('.zimu-explain'));
+    await video(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.3; });
+    await sleep(200);
+    check('explanation stays when the mouse leaves, a word is clicked, or Esc closes the popup', stays && both && afterEsc, `${stays} ${both} ${afterEsc}`);
+
+    // scrolling inside it doesn't reach Jellyfin (which turns the volume)
+    await page.evaluate(() => { window.__wheel = false; document.addEventListener('wheel', () => { window.__wheel = true; }); });
+    const xBox = await (await page.$('.zimu-explain')).boundingBox();
+    await page.mouse.move(xBox.x + xBox.width / 2, xBox.y + xBox.height / 2);
+    await page.mouse.wheel({ deltaY: 120 });
+    await sleep(150);
+    const wheelInPanel = await page.evaluate(() => window.__wheel);
+    await page.mouse.move(200, 200);
+    await page.mouse.wheel({ deltaY: 120 });
+    await sleep(150);
+    const wheelOnVideo = await page.evaluate(() => window.__wheel);
+    check('scrolling the explanation doesn’t reach Jellyfin’s volume', wheelInPanel === false && wheelOnVideo === true, `panel:${wheelInPanel} video:${wheelOnVideo}`);
     await page.mouse.move(10, 10);
+
+    // moving on hides it; coming back shows the saved one (no new request)
+    await video(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 6.8; });
+    const gone = await waitFor(async () => (await explainText()) === null, 2000);
+    await video(() => { document.querySelector('video').currentTime = 4.3; });
+    const cameBack = await waitFor(async () => { const t = await explainText(); return t && t.includes('erhua') && /Saved to Sentences/.test(t) ? t : null; }, 4000);
+    check('next line hides it; going back brings it back from the save', !!gone && !!cameBack && state.claude.length === 1, `gone:${!!gone} back:${!!cameBack} requests:${state.claude.length}`);
+    check('…without pausing again', await video(() => document.querySelector('video').paused), 'paused by the seek, not re-paused');
+    await page.keyboard.press('Escape');
+
+    // every explanation lands in the flashcards' Sentences tab
+    await cards.bringToFront();
+    await cards.click('#tab-sentences');
+    const listed = await waitFor(() => cards.evaluate(() => {
+      const items = [...document.querySelectorAll('.sentence-item')];
+      return items.length === 1 ? { zh: items[0].querySelector('.sentence-zh').textContent, x: items[0].querySelector('.explanation').innerText, play: !!items[0].querySelector('.play'), count: document.getElementById('sentence-count').textContent } : null;
+    }), 4000);
+    check('Sentences tab lists the explained line with its explanation and ▶', !!listed && listed.zh === '你今天想去哪儿吃饭？' && /erhua/.test(listed.x) && listed.play && listed.count === '1', JSON.stringify(listed));
+    await cards.screenshot({ path: path.join(OUT, '8-sentences.png') });
+    await page.bringToFront();
 
     // flashcard page shows the card and plays its moment
     await cards.bringToFront();

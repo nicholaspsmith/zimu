@@ -13,6 +13,7 @@
     <nav>
       <button id="tab-review" class="tab">Review <span id="due-count" class="pill">0</span></button>
       <button id="tab-list" class="tab">All cards <span id="total-count" class="pill">0</span></button>
+      <button id="tab-sentences" class="tab">Sentences <span id="sentence-count" class="pill">0</span></button>
       <button id="tab-settings" class="tab">Settings</button>
     </nav>
     <div class="spacer"></div>
@@ -66,12 +67,19 @@
       </table>
       <p id="list-empty" class="empty" hidden>No cards yet.</p>
     </section>
+    <section id="sentences" hidden>
+      <input id="sentence-search" type="search" placeholder="Search Chinese, pinyin, English or the explanation">
+      <div id="sentence-list"></div>
+      <p id="sentences-empty" class="empty" hidden>No sentence translations yet.<br>
+        <span class="muted">Rest the mouse on a subtitle line (not on a word) and Claude explains it; every explanation lands here.</span></p>
+    </section>
+
     <section id="settings" hidden>
       <h2>Sentence explanations</h2>
       <p class="muted">Hover the subtitle box (not a word) and Claude explains the line: a literal
         gloss, what it really means, how the English subtitle got there, and any slang or idioms.
         It uses your Anthropic API key, at roughly 1¢ per new line; each line is explained once and
-        saved, so rewatching costs nothing.</p>
+        saved under Sentences, so rewatching costs nothing.</p>
       <label class="field">Anthropic API key
         <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
       </label>
@@ -82,10 +90,6 @@
       </div>
       <p class="muted small">Create a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">console.anthropic.com → API keys</a>.
         It's stored only in this browser's extension storage and sent only to api.anthropic.com.</p>
-      <div class="row">
-        <button id="clear-explanations">Clear saved explanations</button>
-        <span id="explain-count" class="muted"></span>
-      </div>
     </section>
   </main>
   <div id="toast" hidden></div>

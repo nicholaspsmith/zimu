@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 let cards = [];
 let queue = [];
 let current = null;
-const viewFromHash = () => ({ '#list': 'list', '#settings': 'settings' })[location.hash] || 'review';
+const viewFromHash = () => ({ '#list': 'list', '#sentences': 'sentences', '#settings': 'settings' })[location.hash] || 'review';
 let view = viewFromHash();
 
 function toast(text) {
@@ -198,20 +198,73 @@ checkPermissions();
 function setView(v) {
   view = v;
   history.replaceState(null, '', `#${v}`);
-  for (const name of ['review', 'list', 'settings']) {
+  for (const name of ['review', 'list', 'sentences', 'settings']) {
     $(name).hidden = v !== name;
     $(`tab-${name}`).classList.toggle('active', v === name);
   }
-  if (v === 'review') { buildQueue(); showNext(); } else if (v === 'list') renderList(); else renderSettings();
+  if (v === 'review') { buildQueue(); showNext(); }
+  else if (v === 'list') renderList();
+  else if (v === 'sentences') renderSentences();
+  else renderSettings();
 }
+
+// ---- sentence translations ----------------------------------------------------
+
+let sentences = [];
+
+// Plain text with **bold** and "- " bullets → DOM (same rules as the overlay).
+function explanationNode(text) {
+  const box = h('div', { class: 'explanation' });
+  for (const raw of String(text || '').split('\n')) {
+    const line = raw.trimEnd();
+    if (!line.trim()) continue;
+    const bullet = /^\s*[-•*]\s+/.test(line);
+    const row = h('div', { class: bullet ? 'x-bullet' : 'x-para' });
+    line.replace(/^\s*[-•*]\s+/, '').split(/(\*\*[^*]+\*\*)/).forEach((part) => {
+      if (/^\*\*[^*]+\*\*$/.test(part)) row.append(h('b', null, part.slice(2, -2)));
+      else if (part) row.append(part);
+    });
+    box.append(row);
+  }
+  return box;
+}
+
+async function loadSentences() {
+  sentences = await Z.Sentences.all();
+  $('sentence-count').textContent = sentences.length;
+}
+
+function renderSentences() {
+  const q = $('sentence-search').value.trim().toLowerCase();
+  const rows = sentences.filter((x) => !q || [x.line, x.pinyin, x.english, x.explanation]
+    .some((v) => v && String(v).toLowerCase().includes(q)));
+  $('sentence-list').replaceChildren(...rows.map((x) => h('article', { class: 'sentence-item' },
+    h('div', { class: 'sentence-head' },
+      h('div', { class: 'sentence-zh' }, x.line),
+      h('div', { class: 'sentence-actions' },
+        x.source ? h('button', { class: 'play', title: 'Play this line in Jellyfin', onclick: () => play(x) }, '▶ ', sourceLabel(x)) : null,
+        h('button', { class: 'ghost', title: 'Delete', onclick: async () => {
+          await Z.Sentences.remove(x.key);
+          toast('Deleted');
+        } }, '🗑'))),
+    x.pinyin ? h('div', { class: 'sentence-py' }, x.pinyin) : null,
+    x.english ? h('div', { class: 'sentence-en' }, h('span', { class: 'muted small' }, x.englishSource === 'mt' ? 'Machine translation: ' : 'Subtitle: '), x.english) : null,
+    explanationNode(x.explanation))));
+  $('sentences-empty').hidden = rows.length > 0 || !!q;
+}
+
+$('sentence-search').oninput = renderSentences;
+Z.Sentences.onChange(async () => {
+  await loadSentences();
+  if (view === 'sentences') renderSentences();
+});
 
 // ---- settings: Anthropic API key ---------------------------------------------
 
 async function renderSettings() {
-  const { anthropicKey, xKeys = [] } = await chrome.storage.local.get(['anthropicKey', 'xKeys']);
+  const { anthropicKey } = await chrome.storage.local.get('anthropicKey');
   $('api-key').value = '';
   $('api-key-status').textContent = anthropicKey ? `Key saved (…${anthropicKey.slice(-4)})` : 'No key saved';
-  $('explain-count').textContent = `${xKeys.length} saved`;
 }
 
 $('api-key-save').onclick = async () => {
@@ -226,11 +279,7 @@ $('api-key-remove').onclick = async () => {
   toast('Key removed.');
   renderSettings();
 };
-$('clear-explanations').onclick = async () => {
-  const r = await chrome.runtime.sendMessage({ type: 'clearExplanations' });
-  toast(`Cleared ${(r && r.removed) || 0} saved explanations.`);
-  renderSettings();
-};
+
 
 function updateCounts() {
   const now = Date.now();
@@ -241,6 +290,7 @@ function updateCounts() {
 $('tab-review').onclick = () => setView('review');
 $('tab-list').onclick = () => setView('list');
 $('tab-settings').onclick = () => setView('settings');
+$('tab-sentences').onclick = () => setView('sentences');
 window.addEventListener('hashchange', () => setView(viewFromHash()));
 $('r-show').onclick = reveal;
 $('r-play').onclick = () => play(current);
@@ -269,7 +319,7 @@ Z.Cards.onChange((next) => {
   else if (!current) { buildQueue(); showNext(); }
 });
 
-Z.Cards.all().then((all) => {
+Promise.all([Z.Cards.all(), loadSentences()]).then(([all]) => {
   cards = all;
   updateCounts();
   setView(view);

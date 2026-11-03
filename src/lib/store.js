@@ -83,5 +83,28 @@
     },
   };
 
-  Object.assign(Z, { DEFAULT_SETTINGS, Settings, Cards });
+  // Explained lines, saved by the background script under "s:<hash>".
+  const Sentences = {
+    async all() {
+      const everything = await area().get(null);
+      return Object.entries(everything)
+        .filter(([k]) => k.startsWith('s:'))
+        .map(([, v]) => v)
+        .sort((a, b) => (b.created || 0) - (a.created || 0));
+    },
+    async has(key) {
+      const r = await area().get(`s:${key}`);
+      return !!r[`s:${key}`];
+    },
+    async remove(key) {
+      await area().remove(`s:${key}`);
+    },
+    onChange(cb) {
+      chrome.storage.onChanged.addListener((changes, name) => {
+        if (name === 'local' && Object.keys(changes).some((k) => k.startsWith('s:'))) cb();
+      });
+    },
+  };
+
+  Object.assign(Z, { DEFAULT_SETTINGS, Settings, Cards, Sentences });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -376,6 +376,8 @@
     const cue = S.zh[idx];
     renderZh(cue);
     renderEn(idx);
+    if (idx !== S.explainDismissed) S.explainDismissed = -1; // a dismissal lasts while its line is up
+    syncExplain();
   }
 
   // ---- playback loop -------------------------------------------------------
@@ -412,16 +414,22 @@
     kick();
   }
 
-  // Plays the estimated moment code points [from, to) of cue i are spoken,
-  // with a little margin either side, then pauses.
-  function playSpan(i, from, to) {
+  // Plays from the estimated moment code points [from, to) of cue i are
+  // spoken (with a little lead-in). stopAfter: pause just after them (the
+  // ▶ Hear it button); otherwise playback carries on and auto-pause, if on,
+  // stops it at the end of the line as usual (clicking a word).
+  function playSpan(i, from, to, { stopAfter = false } = {}) {
     const cue = S.zh[i];
     if (!cue || from == null) return;
     const est = Z.estimateSpan(cue.zhText, from, to, cue.start, cue.end);
     const a = Math.max(cue.start - 0.1, est.start - 0.35);
-    const b = Math.min(cue.end + 0.2, est.end + 0.35);
-    S.autoPausedIdx = i; // auto-pause mustn't cut the clip at the line's end
-    S.clipEnd = b;
+    if (stopAfter) {
+      S.autoPausedIdx = i; // auto-pause mustn't cut the clip at the line's end
+      S.clipEnd = Math.min(cue.end + 0.2, est.end + 0.35);
+    } else {
+      S.autoPausedIdx = -1;
+      S.clipEnd = null;
+    }
     seek(a);
   }
 
@@ -501,7 +509,6 @@
 
   function openPopup(content, anchorRect) {
     if (popup) popup.remove();
-    closeExplain();
     hold('popup');
     popup = h('div', { class: 'zimu-popup', onmousedown: (e) => e.stopPropagation() },
       h('button', { class: 'zimu-x', title: 'Close (Esc)', onclick: () => closePopup() }, '×'),
@@ -543,7 +550,8 @@
   async function sentenceFor(i) {
     const cue = S.zh[i];
     if (!cue) return null;
-    const pyLine = cue.zhText.split('\n').map((l) => tokenize(l).map((t) => (t.han ? tokenPinyin(t) : t.text.trim())).filter(Boolean).join(' ')).join(' / ');
+    const pyLine = cue.zhText.split('\n').map((l) => tokenize(l).map((t) => (t.han ? tokenPinyin(t) : t.text.trim())).filter(Boolean).join(' ')
+      .replace(/\s+([，。！？、；：,.!?;:…）」』”])/g, '$1')).join(' / ');
     let en = englishFor(i);
     if (en && typeof en.then === 'function') en = await Promise.race([en, new Promise((r) => setTimeout(() => r(''), 4000))]);
     if (!en && S.enMode !== 'mt') en = await Promise.race([mt(cue.zhText.replace(/\n/g, ' ')), new Promise((r) => setTimeout(() => r(''), 4000))]);
@@ -594,7 +602,7 @@
     })) : null;
     const shownIdx = S.shown;
     const hear = tok.from != null
-      ? h('button', { class: 'zimu-btn', title: 'Play where it’s said (estimated)', onclick: () => playSpan(shownIdx, tok.from, tok.to) }, '▶ Hear it')
+      ? h('button', { class: 'zimu-btn', title: 'Play where it’s said (estimated)', onclick: () => playSpan(shownIdx, tok.from, tok.to, { stopAfter: true }) }, '▶ Hear it')
       : null;
     const card = async () => ({
       kind: 'word',
@@ -650,7 +658,7 @@
       })),
       h('div', { class: 'zimu-actions' },
         saveButton(text, card),
-        h('button', { class: 'zimu-btn', title: 'Play where it’s said (estimated)', onclick: () => playSpan(shownIdx, span.from, span.to) }, '▶ Hear it'),
+        h('button', { class: 'zimu-btn', title: 'Play where it’s said (estimated)', onclick: () => playSpan(shownIdx, span.from, span.to, { stopAfter: true }) }, '▶ Hear it'),
         h('button', { class: 'zimu-btn', onclick: () => gotoLine('repeat') }, '↻ Replay line'))),
     anchorRect);
     if (autoplay && S.settings.playWordOnClick) playSpan(shownIdx, span.from, span.to);
@@ -699,6 +707,11 @@
   }, true);
   // Swallow clicks on the overlay so Jellyfin doesn't toggle play/pause.
   root.addEventListener('click', (e) => e.stopPropagation());
+  // Jellyfin turns the volume with the mouse wheel anywhere on the page;
+  // scrolling inside one of our panels must only scroll the panel.
+  root.addEventListener('wheel', (e) => {
+    if (e.target.closest && e.target.closest('.zimu-explain, .zimu-popup, .zimu-panel')) e.stopPropagation();
+  }, { passive: true });
   root.addEventListener('dblclick', (e) => e.stopPropagation());
 
   // Selected tokens lo..hi, plus the punctuation between them on each line.
@@ -754,17 +767,32 @@
     }
   }
 
+  // An explanation stays up while its line is on screen: playback, word
+  // popups and mouse movement don't close it; a different line does, and
+  // coming back to an explained line shows it again (from the saved copy).
+  // × / Esc dismiss it until the line comes round again.
+
+  const explainJobs = new Map(); // key → { text, state, cached, error, subs }
+
+  function explainKey(i) {
+    const cue = S.zh[i];
+    return cue ? hash(`${S.itemId}|${cue.start.toFixed(2)}|${cue.zhText}`) : null;
+  }
+
   function closeExplain() {
     clearTimeout(S.explainTimer);
-    clearTimeout(S.explainClose);
     S.explainTimer = 0;
-    if (explainPanel) { explainPanel.remove(); explainPanel = null; }
+    if (explainPanel) {
+      if (explainPanel.unsub) explainPanel.unsub();
+      explainPanel.remove();
+      explainPanel = null;
+    }
   }
-  const cancelExplainClose = () => clearTimeout(S.explainClose);
-  const scheduleExplainClose = () => {
-    clearTimeout(S.explainClose);
-    S.explainClose = setTimeout(closeExplain, 500);
-  };
+
+  function dismissExplain() {
+    if (explainPanel) S.explainDismissed = Number(explainPanel.dataset.cue);
+    closeExplain();
+  }
 
   const EXPLAIN_ERRORS = {
     badkey: 'Anthropic didn’t accept the API key. Check it in Zimu’s settings.',
@@ -773,49 +801,78 @@
     refusal: 'Claude declined to explain this line.',
   };
 
-  async function openExplain(i) {
+  // One request per line at a time; a panel reopened mid-stream just
+  // subscribes to the running job.
+  function explainJob(i, key) {
+    if (explainJobs.has(key)) return explainJobs.get(key);
+    const job = { text: '', state: 'running', cached: false, error: null, subs: new Set() };
+    explainJobs.set(key, job);
+    const notify = () => job.subs.forEach((fn) => fn());
+    const finish = () => { explainJobs.delete(key); notify(); };
+    (async () => {
+      const cue = S.zh[i];
+      const sentence = await sentenceFor(i);
+      const neighbours = (from, to) => S.zh.slice(Math.max(0, from), Math.max(0, to)).map((c) => c.zhText.replace(/\n/g, ' '));
+      const port = chrome.runtime.connect({ name: 'explain' });
+      port.onMessage.addListener((m) => {
+        if (m.type === 'delta') {
+          job.text += m.text;
+          notify();
+        } else if (m.type === 'done') {
+          Object.assign(job, { text: m.text, state: 'done', cached: !!m.cached });
+          port.disconnect();
+          finish();
+        } else if (m.type === 'error') {
+          Object.assign(job, { state: 'error', error: m });
+          port.disconnect();
+          finish();
+        }
+      });
+      port.postMessage({
+        key,
+        title: S.title,
+        line: cue.zhText.replace(/\n/g, ' '),
+        pinyin: sentence ? sentence.pinyin : '',
+        english: sentence ? sentence.en : '',
+        englishSource: typeof S.enMode === 'number' || S.enMode === 'embedded' ? 'subtitle' : 'mt',
+        before: neighbours(i - 2, i),
+        after: neighbours(i + 1, i + 3),
+        source: cueSource(i),
+      });
+    })().catch((e) => {
+      Object.assign(job, { state: 'error', error: { code: 'api', message: String(e.message || e) } });
+      finish();
+    });
+    return job;
+  }
+
+  function openExplain(i, { pause = false } = {}) {
     const cue = S.zh[i];
-    if (!cue) return;
+    const key = explainKey(i);
+    if (!cue || !key) return;
     closeExplain();
-    const body = h('div', { class: 'zimu-x-body' }, h('span', { class: 'zimu-muted' }, 'Thinking…'));
-    const foot = h('div', { class: 'zimu-x-foot zimu-muted' });
-    const panelEl = h('div', {
-      class: 'zimu-explain',
-      'data-cue': i,
-      onmousedown: (e) => e.stopPropagation(),
-      onmouseenter: cancelExplainClose,
-      onmouseleave: scheduleExplainClose,
-    },
-    h('button', { class: 'zimu-x', title: 'Close (Esc)', onclick: () => closeExplain() }, '×'),
-    h('div', { class: 'zimu-x-line' }, cue.zhText.replace(/\n/g, ' ')),
-    body, foot);
+    S.explainDismissed = -1;
+    if (pause && S.video && !S.video.paused) S.video.pause();
+
+    const body = h('div', { class: 'zimu-x-body' });
+    const foot = h('div', { class: 'zimu-x-foot' },
+      h('button', { class: 'zimu-btn', title: 'Replay this line (S)', onclick: () => gotoLine('repeat') }, '↻ Replay line'),
+      h('span', { class: 'zimu-muted zimu-x-status' }));
+    const pinyin = cue.zhText.split('\n').map((l) => tokenize(l).filter((t) => t.han).map(tokenPinyin).join(' ')).join(' / ');
+    const panelEl = h('div', { class: 'zimu-explain', 'data-cue': i, onmousedown: (e) => e.stopPropagation() },
+      h('button', { class: 'zimu-x', title: 'Close (Esc)', onclick: () => dismissExplain() }, '×'),
+      h('div', { class: 'zimu-x-line' }, cue.zhText.replace(/\n/g, ' ')),
+      h('div', { class: 'zimu-x-py' }, pinyin),
+      body, foot);
     explainPanel = panelEl;
     root.append(panelEl);
 
-    const sentence = await sentenceFor(i);
-    const neighbours = (from, to) => S.zh.slice(Math.max(0, from), Math.max(0, to)).map((c) => c.zhText.replace(/\n/g, ' '));
-    const req = {
-      key: hash(`${S.itemId}|${cue.start.toFixed(2)}|${cue.zhText}`),
-      title: S.title,
-      line: cue.zhText.replace(/\n/g, ' '),
-      pinyin: sentence ? sentence.pinyin : '',
-      english: sentence ? sentence.en : '',
-      englishSource: typeof S.enMode === 'number' || S.enMode === 'embedded' ? 'subtitle' : 'mt',
-      before: neighbours(i - 2, i),
-      after: neighbours(i + 1, i + 3),
-    };
-    let text = '';
-    const port = chrome.runtime.connect({ name: 'explain' });
-    port.onMessage.addListener((m) => {
-      if (m.type === 'delta') {
-        text += m.text;
-        renderExplanation(body, text);
-      } else if (m.type === 'done') {
-        renderExplanation(body, m.text);
-        foot.textContent = m.cached ? 'Claude · saved explanation' : 'Claude';
-        port.disconnect();
-      } else if (m.type === 'error') {
+    const job = explainJob(i, key);
+    const status = foot.querySelector('.zimu-x-status');
+    const paint = () => {
+      if (job.state === 'error') {
         body.textContent = '';
+        const m = job.error || {};
         if (m.code === 'nokey') {
           body.append(
             h('div', null, 'Sentence explanations need an Anthropic API key.'),
@@ -823,10 +880,28 @@
         } else {
           body.append(EXPLAIN_ERRORS[m.code] || `Explanation failed: ${m.message || m.code}`);
         }
-        port.disconnect();
+        status.textContent = '';
+        return;
       }
-    });
-    port.postMessage(req);
+      if (job.text) renderExplanation(body, job.text);
+      else body.replaceChildren(h('span', { class: 'zimu-muted' }, 'Thinking…'));
+      status.textContent = job.state === 'done' ? '★ Saved to Sentences' : '';
+    };
+    job.subs.add(paint);
+    panelEl.unsub = () => job.subs.delete(paint);
+    paint();
+  }
+
+  // Called when the line on screen changes: drop a panel for another line,
+  // and bring back the saved explanation of an already-explained one.
+  async function syncExplain() {
+    const i = S.shown;
+    if (explainPanel && Number(explainPanel.dataset.cue) !== i) closeExplain();
+    if (i < 0 || explainPanel || S.explainDismissed === i || !S.settings.explainOnHover) return;
+    const key = explainKey(i);
+    if (!key) return;
+    const known = explainJobs.has(key) || await Z.Sentences.has(key);
+    if (known && S.shown === i && !explainPanel && S.explainDismissed !== i) openExplain(i);
   }
 
   lines.addEventListener('mousemove', (e) => {
@@ -836,17 +911,14 @@
       S.explainTimer = 0;
       return;
     }
-    cancelExplainClose();
     if (explainPanel && Number(explainPanel.dataset.cue) === S.shown) return;
     if (!S.explainTimer) {
-      S.explainTimer = setTimeout(() => { S.explainTimer = 0; openExplain(S.shown); }, 600);
+      S.explainTimer = setTimeout(() => { S.explainTimer = 0; openExplain(S.shown, { pause: true }); }, 600);
     }
   });
-  lines.addEventListener('mouseenter', cancelExplainClose);
   lines.addEventListener('mouseleave', () => {
     clearTimeout(S.explainTimer);
     S.explainTimer = 0;
-    scheduleExplainClose();
   });
 
   document.addEventListener('mousedown', (e) => {
@@ -886,7 +958,7 @@
       h('label', { class: 'zimu-field' }, 'Chinese', zhSel),
       h('label', { class: 'zimu-field' }, 'English', enSel),
       h('div', { class: 'zimu-panel-title' }, 'Behaviour'),
-      check('playWordOnClick', 'Play a word from the video when I click it'),
+      check('playWordOnClick', 'Play from a word when I click it'),
       check('explainOnHover', 'Explain the sentence when I hover the box (not a word)'),
       check('pauseOnHover', 'Pause while the mouse is over the subtitles'),
       check('autoPause', 'Pause at the end of each line (Q)'),
@@ -932,6 +1004,8 @@
 
   async function loadItem(itemId, mediaSourceId) {
     setStatus('Zimu: finding subtitles…', 0);
+    closeExplain();
+    S.explainDismissed = -1;
     S.itemId = itemId;
     S.zh = [];
     S.en = [];
@@ -1136,7 +1210,8 @@
       a: () => gotoLine('prev'), s: () => gotoLine('repeat'), d: () => gotoLine('next'), q: toggleAutoPause,
       '[': () => setSpeed(sp - 1), ']': () => setSpeed(sp + 1), '{': () => setSpeed(sp - 5), '}': () => setSpeed(sp + 5),
     }[k];
-    if (e.key === 'Escape' && (popup || panel || explainPanel)) { closePopup(); togglePanel(false); closeExplain(); }
+    if (e.key === 'Escape' && (popup || panel)) { closePopup(); togglePanel(false); }
+    else if (e.key === 'Escape' && explainPanel) dismissExplain();
     else if (act) act();
     else return;
     e.preventDefault();

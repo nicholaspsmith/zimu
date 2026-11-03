@@ -1,10 +1,11 @@
 // Sentence explanations from Claude, streamed to the overlay over a port.
-// The overlay sends the line plus its neighbours; answers are cached in
-// extension storage so a line is only ever paid for once.
+// The overlay sends the line plus its neighbours. Each finished explanation
+// is saved as a sentence (storage key "s:<hash>") — that is both the cache,
+// so a line is only ever paid for once, and the flashcard page's Sentences
+// list.
 import Anthropic from '@anthropic-ai/sdk';
 
 const MODEL = 'claude-opus-5-5';
-const CACHE_LIMIT = 1500; // explanations kept (≈2 KB each)
 
 const SYSTEM = `You help an English-speaking learner of Mandarin understand a line of dialogue from a show they are watching. They can already look up single words; what they need from you is how the line works as a whole.
 
@@ -30,18 +31,23 @@ function userPrompt(r) {
   return lines.join('\n');
 }
 
-async function cacheGet(key) {
+async function getOne(key) {
   const r = await chrome.storage.local.get(key);
   return r[key] || null;
 }
 
-async function cachePut(key, value) {
-  const { xKeys = [] } = await chrome.storage.local.get('xKeys');
-  const keys = xKeys.filter((k) => k !== key);
-  keys.push(key);
-  const drop = keys.length > CACHE_LIMIT ? keys.splice(0, keys.length - CACHE_LIMIT) : [];
-  if (drop.length) await chrome.storage.local.remove(drop);
-  await chrome.storage.local.set({ [key]: value, xKeys: keys });
+function sentenceRecord(req, text, model, created = Date.now()) {
+  return {
+    key: req.key,
+    line: req.line,
+    pinyin: req.pinyin || '',
+    english: req.english || '',
+    englishSource: req.englishSource || '',
+    explanation: text,
+    model,
+    source: req.source || null,
+    created,
+  };
 }
 
 function errorCode(e) {
@@ -53,10 +59,19 @@ function errorCode(e) {
 }
 
 async function explain(port, req, state) {
-  const key = `x:${req.key}`;
-  const cached = await cacheGet(key);
-  if (cached) {
-    port.postMessage({ type: 'done', text: cached.text, model: cached.model, cached: true });
+  const key = `s:${req.key}`;
+  const saved = await getOne(key);
+  if (saved) {
+    port.postMessage({ type: 'done', text: saved.explanation, model: saved.model, cached: true });
+    return;
+  }
+  // 0.3.0 cached explanations under "x:" without the line itself; adopt one
+  // as a sentence now that the overlay has sent the line along.
+  const legacy = await getOne(`x:${req.key}`);
+  if (legacy) {
+    await chrome.storage.local.set({ [key]: sentenceRecord(req, legacy.text, legacy.model, legacy.at) });
+    await chrome.storage.local.remove(`x:${req.key}`);
+    port.postMessage({ type: 'done', text: legacy.text, model: legacy.model, cached: true });
     return;
   }
   const { anthropicKey, apiBaseUrl } = await chrome.storage.local.get(['anthropicKey', 'apiBaseUrl']);
@@ -88,7 +103,7 @@ async function explain(port, req, state) {
     return;
   }
   const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
-  await cachePut(key, { text, model: msg.model, at: Date.now() });
+  await chrome.storage.local.set({ [key]: sentenceRecord(req, text, msg.model) });
   if (!state.closed) port.postMessage({ type: 'done', text, model: msg.model, cached: false });
 }
 
@@ -104,16 +119,5 @@ export function startExplainer() {
         port.postMessage({ type: 'error', code: errorCode(e), message: String(e.message || e) });
       });
     });
-  });
-
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg && msg.type === 'clearExplanations') {
-      chrome.storage.local.get('xKeys').then(async ({ xKeys = [] }) => {
-        await chrome.storage.local.remove([...xKeys, 'xKeys']);
-        sendResponse({ ok: true, removed: xKeys.length });
-      });
-      return true;
-    }
-    return false;
   });
 }

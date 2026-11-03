@@ -5,14 +5,18 @@
   const Z = root.Zimu || (root.Zimu = {});
   const area = () => chrome.storage.local;
 
+  const SCHEMA = 2;
   const DEFAULT_SETTINGS = {
+    schema: SCHEMA,
     showHanzi: true,
     showPinyin: true,
     showEnglish: true,
     fontSize: 34, // px for hanzi
     bottom: 12, // % of the window height
     autoPause: false, // pause at the end of every line
-    pauseOnHover: true,
+    pauseOnHover: false,
+    playWordOnClick: true, // clicking a word plays it from the video
+    speed: 100, // playback speed in %, 60-100
     hideNativeSubs: true,
     toneColors: false,
     machineTranslate: true, // when no English subtitle track exists
@@ -21,7 +25,14 @@
   const Settings = {
     async get() {
       const r = await area().get('settings');
-      return { ...DEFAULT_SETTINGS, ...(r.settings || {}) };
+      const stored = r.settings || {};
+      if ((stored.schema || 1) < 2) {
+        // 0.2.0: hovering the subtitles no longer pauses by default
+        stored.pauseOnHover = false;
+        stored.schema = SCHEMA;
+        await area().set({ settings: stored });
+      }
+      return { ...DEFAULT_SETTINGS, ...stored };
     },
     async set(patch) {
       const s = { ...(await Settings.get()), ...patch };

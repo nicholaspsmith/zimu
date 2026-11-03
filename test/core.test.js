@@ -110,3 +110,21 @@ test('manifest runs on every Jellyfin address in use', () => {
     assert.ok(covers(m.web_accessible_resources[0].matches, url), `dictionary not accessible on ${url}`);
   }
 });
+
+test('estimating when a word is spoken inside a line', () => {
+  const text = '我们一起学习中文吧';
+  const w = Z.estimateSpan(text, 4, 6, 10, 19.6); // 学习
+  // speech assumed from 10.2 to 19.25, one syllable ≈ 1.006 s
+  assert.ok(Math.abs(w.start - 14.22) < 0.02, String(w.start));
+  assert.ok(Math.abs(w.end - 16.23) < 0.02, String(w.end));
+  // first and last words touch the speech window's edges
+  assert.ok(Math.abs(Z.estimateSpan(text, 0, 2, 10, 19.6).start - 10.2) < 1e-9);
+  assert.ok(Math.abs(Z.estimateSpan(text, 8, 9, 10, 19.6).end - 19.25) < 1e-9);
+  // a pause (comma) takes time, pushing later words back
+  const withComma = Z.estimateSpan('好的，我们走吧', 3, 5, 0, 4);
+  const without = Z.estimateSpan('好的我们走吧', 2, 4, 0, 4);
+  assert.ok(withComma.start > without.start);
+  // offsets count code points, not UTF-16 units
+  const astral = Z.estimateSpan('𠮷我们', 1, 3, 0, 3);
+  assert.ok(astral.start > 0.5 && astral.end <= 3);
+});

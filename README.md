@@ -8,7 +8,11 @@ Zen/Firefox.
   (hanzi + pinyin, English + pinyin, pinyin only, …). Pinyin is
   context-aware (还 hái/huán, 睡着 shuìzháo, 哪儿 nǎr).
 - **Click a word** for its CC-CEDICT definitions, a character breakdown and
-  a 🔊 pronunciation.
+  a 🔊 pronunciation — and Zimu plays the moment that word is said in the
+  video (▶ Hear it replays it). Subtitles only time whole lines, so the
+  word's moment is estimated from its position in the line (Mandarin runs at
+  about one syllable per character); a short margin either side covers most
+  misses. Turn it off under ⚙ if you only want definitions.
 - **Drag across words** (or shift-click) to look up a phrase: machine
   translation and a word-by-word breakdown.
 - **☆ Save** a word or phrase to flashcards. Each card keeps the sentence,
@@ -18,8 +22,12 @@ Zen/Firefox.
   its end so you can hear it again. Export to Anki (each row carries a link
   that plays the moment) or back up/restore as JSON.
 - Line navigation like LLN: **A** previous line, **S** repeat, **D** next,
-  **Q** pause at the end of every line. Subtitles pause while the mouse is
-  over them.
+  **Q** pause at the end of every line.
+- **Speed** from 60% to 100% in 1% steps: − / + on the toolbar, **[ ]** (1%)
+  and **{ }** (5%), or the slider under ⚙. Pitch is kept, so voices sound
+  natural, just slower. Click the percentage to go back to 100%.
+- Hovering the subtitles doesn't pause (turn "Pause while the mouse is over
+  the subtitles" on under ⚙ if you want it).
 
 English comes from, in order: the English half of a bilingual Chinese
 track, an English subtitle track, or machine translation (Google Translate's
@@ -36,7 +44,7 @@ npm run build      # fetches CC-CEDICT, vendors pinyin-pro
 **Chrome / Brave:** `chrome://extensions` → Developer mode → Load unpacked →
 pick `~/Code/zimu/src`.
 
-**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.1.2.xpi` onto
+**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.2.0.xpi` onto
 the browser (unsigned add-ons need `xpinstall.signatures.required = false`
 in `about:config`), or load `src/manifest.json` temporarily from
 `about:debugging` → This Firefox.
@@ -76,7 +84,7 @@ browser (`POST /Sessions/{id}/Playing`).
 
 ```sh
 npm test                 # unit tests (pinyin, cues, segmentation, scheduling)
-node test/e2e/run.js     # Chrome for Testing + a fake Jellyfin, 17 checks,
+node test/e2e/run.js     # Chrome for Testing + a fake Jellyfin, 21 checks,
                          # screenshots in ./e2e-out
 node test/e2e/run.js --firefox   # same in Firefox Developer Edition
 ```

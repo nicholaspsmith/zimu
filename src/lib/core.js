@@ -218,6 +218,41 @@
     return tokens;
   }
 
+  // ---- word timing ---------------------------------------------------------
+
+  // Roughly how long each character takes to say, in syllables. Mandarin is
+  // close to syllable-timed, so a line's speech is shared out by these.
+  function speechWeight(ch) {
+    if (HAN.test(ch) || /[0-9０-９]/.test(ch)) return 1;
+    if (ch === '\n' || /[，、；：,;:]/.test(ch)) return 0.5;
+    if (/[。！？!?…—]/.test(ch)) return 0.7;
+    if (/[A-Za-z]/.test(ch)) return 0.3;
+    if (/\s/.test(ch)) return 0.15;
+    return 0;
+  }
+
+  // Estimated [start, end] (seconds) of the speech for code points
+  // [from, to) of a cue's text. Subtitles usually appear a little before the
+  // voice and linger after it, so the speech window is trimmed first.
+  function estimateSpan(text, from, to, cueStart, cueEnd) {
+    const chars = Array.from(text);
+    const dur = Math.max(0.1, cueEnd - cueStart);
+    const s0 = cueStart + Math.min(0.2, dur * 0.08);
+    const s1 = cueEnd - Math.min(0.35, dur * 0.12);
+    let before = 0;
+    let inside = 0;
+    let total = 0;
+    chars.forEach((ch, i) => {
+      const w = speechWeight(ch);
+      total += w;
+      if (i < from) before += w;
+      else if (i < to) inside += w;
+    });
+    if (!total) return { start: s0, end: s1 };
+    const per = (s1 - s0) / total;
+    return { start: s0 + before * per, end: s0 + (before + inside) * per };
+  }
+
   // ---- flashcard scheduling (Leitner boxes) -------------------------------
 
   const DAY = 24 * 3600 * 1000;
@@ -275,6 +310,7 @@
     activeIndex,
     overlappingText,
     segment,
+    estimateSpan,
     schedule,
     isDue,
     BOX_DAYS,

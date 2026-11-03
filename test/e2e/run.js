@@ -88,6 +88,9 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const pop = await waitFor(() => page.evaluate(() => document.querySelector('.zimu-popup') && document.querySelector('.zimu-popup').innerText));
     check('word popup with definition', !!pop && /eat/i.test(pop) && pop.includes('chīfàn'), (pop || '').split('\n').slice(0, 4).join(' | '));
     await page.screenshot({ path: path.join(OUT, '2-word-popup.png') });
+    // clicking 吃饭 played its estimated moment (≈4.79–5.91 s in a 3.5–6.0 line)
+    const heard = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 4.5 ? v.currentTime : null; }), 4000, 50);
+    check('clicking a word plays it and stops after it', heard != null && heard >= 5.8 && heard < 6.1, String(heard));
     await page.click('.zimu-save');
     const saved = await waitFor(() => page.evaluate(() => document.querySelector('.zimu-save').textContent.includes('Saved')), 8000);
     check('save to flashcards', !!saved);
@@ -110,6 +113,27 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await page.screenshot({ path: path.join(OUT, '3-phrase-popup.png') });
     await page.keyboard.press('Escape');
     await page.mouse.move(10, 10); // leave the subtitles so hover-pause lets go
+
+    // hovering the subtitles no longer pauses
+    await page.evaluate(() => { const v = document.querySelector('video'); v.currentTime = 6.6; v.play(); });
+    await page.hover('.zimu-lines');
+    await sleep(500);
+    check('hovering the subtitles keeps playing', await page.evaluate(() => !document.querySelector('video').paused));
+    await page.mouse.move(10, 10);
+
+    // speed: [ ] step 1%, { } step 5%, clamped to 60–100%
+    await page.keyboard.press(']');
+    await sleep(150);
+    const r100 = await page.evaluate(() => document.querySelector('video').playbackRate);
+    for (let i = 0; i < 5; i++) await page.keyboard.press('[');
+    await sleep(300);
+    const r95 = await page.evaluate(() => [document.querySelector('video').playbackRate, document.querySelector('.zimu-speed').textContent]);
+    for (let i = 0; i < 12; i++) await page.keyboard.press('{');
+    await sleep(300);
+    const r60 = await page.evaluate(() => document.querySelector('video').playbackRate);
+    check('speed control 60–100% in 1% steps', r100 === 1 && Math.abs(r95[0] - 0.95) < 1e-9 && r95[1] === '95%' && Math.abs(r60 - 0.6) < 1e-9, `${r100} ${r95.join(' ')} ${r60}`);
+    await page.click('.zimu-speed');
+    await sleep(200);
 
     // keyboard: A goes to the previous line
     await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.2; });

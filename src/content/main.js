@@ -148,11 +148,16 @@
   }
 
   const autoBtn = button('⏸ auto', 'Pause at the end of each line (Q)', () => toggleAutoPause());
+  const speedLabel = button('100%', 'Playback speed — click for 100%', () => setSpeed(100));
+  speedLabel.classList.add('zimu-speed');
   toolbar.append(
     button('⏮', 'Previous line (A)', () => gotoLine('prev')),
     button('↻', 'Repeat line (S)', () => gotoLine('repeat')),
     button('⏭', 'Next line (D)', () => gotoLine('next')),
     autoBtn,
+    button('−', 'Slower by 1% ([, or { for 5%)', () => setSpeed(S.settings.speed - 1)),
+    speedLabel,
+    button('+', 'Faster by 1% (], or } for 5%)', () => setSpeed(S.settings.speed + 1)),
     button('⚙', 'Subtitle settings', () => togglePanel()),
     button('🗂', 'Flashcards', () => send({ type: 'openCards' })),
     statusEl,
@@ -172,6 +177,9 @@
     root.classList.toggle('zimu-tones', !!st.toneColors);
     document.documentElement.classList.toggle('zimu-hide-native', !!st.hideNativeSubs && !!S.video && S.zhTrack != null);
     autoBtn.classList.toggle('zimu-on', !!st.autoPause);
+    speedLabel.textContent = `${clampSpeed(st.speed)}%`;
+    speedLabel.classList.toggle('zimu-on', clampSpeed(st.speed) !== 100);
+    applySpeed();
     render(true);
   }
 
@@ -185,17 +193,21 @@
     const showH = st.showHanzi;
     const showP = st.showPinyin;
     if (!showH && !showP) return;
-    for (const line of cue.zhText.split('\n')) {
+    let pos = 0; // code-point offset in cue.zhText, for word timing
+    cue.zhText.split('\n').forEach((line, li) => {
+      if (li) pos += 1; // the line break
       const row = h('div', { class: 'zimu-row' });
       const lineToks = tokenize(line);
       for (let k = 0; k < lineToks.length; k++) {
         const t = lineToks[k];
+        const from = pos;
+        pos += t.chars.length;
         if (!t.han) {
           row.append(h('span', { class: 'zimu-p' }, showH ? t.text : t.text.replace(/[，。！？、；：]/g, (c) => ({ '，': ', ', '。': '. ', '！': '! ', '？': '? ', '、': ', ', '；': '; ', '：': ': ' })[c])));
           continue;
         }
         const ti = S.tokens.length;
-        S.tokens.push({ ...t, lineToks, k });
+        S.tokens.push({ ...t, lineToks, k, from, to: pos });
         const w = h('span', { class: 'zimu-w' + (S.saved.has(t.text) ? ' zimu-saved' : ''), 'data-t': ti });
         if (showH) {
           t.chars.forEach((c, k) => {
@@ -213,7 +225,7 @@
         row.append(w);
       }
       zhBox.append(row);
-    }
+    });
   }
 
   function renderEn(i) {
@@ -281,6 +293,45 @@
     v.currentTime = Math.max(0, sec);
     if (play && v.paused) v.play().catch(() => {});
     kick();
+  }
+
+  // Plays the estimated moment code points [from, to) of cue i are spoken,
+  // with a little margin either side, then pauses.
+  function playSpan(i, from, to) {
+    const cue = S.zh[i];
+    if (!cue || from == null) return;
+    const est = Z.estimateSpan(cue.zhText, from, to, cue.start, cue.end);
+    const a = Math.max(cue.start - 0.1, est.start - 0.35);
+    const b = Math.min(cue.end + 0.2, est.end + 0.35);
+    S.autoPausedIdx = i; // auto-pause mustn't cut the clip at the line's end
+    S.clipEnd = b;
+    seek(a);
+  }
+
+  const clampSpeed = (n) => Math.max(60, Math.min(100, Math.round(n)));
+
+  function applySpeed() {
+    const v = S.video;
+    if (!v) return;
+    v.preservesPitch = true; // slow the speech without lowering the voice
+    const rate = clampSpeed(S.settings.speed) / 100;
+    if (Math.abs(v.playbackRate - rate) > 0.001) v.playbackRate = rate;
+  }
+
+  // Applies at once; saves once the adjusting stops, so quick key presses
+  // aren't undone by storage echoes of earlier values.
+  function setSpeed(n) {
+    const speed = clampSpeed(n);
+    S.settings.speed = speed;
+    applySpeed();
+    speedLabel.textContent = `${speed}%`;
+    speedLabel.classList.toggle('zimu-on', speed !== 100);
+    setStatus(`Speed ${speed}%`, 1500);
+    S.speedPending = true;
+    clearTimeout(S.speedTimer);
+    S.speedTimer = setTimeout(() => {
+      Z.Settings.set({ speed: S.settings.speed }).finally(() => { S.speedPending = false; });
+    }, 400);
   }
 
   function gotoLine(which) {
@@ -411,17 +462,23 @@
         h('ol', null, e.defs.slice(0, 6).map((d) => h('li', null, d))))));
   }
 
-  function wordPopup(tok, anchorRect) {
+  // tok.from/to: position in the shown cue (absent for looked-up characters
+  // that aren't from the line).
+  function wordPopup(tok, anchorRect, { autoplay = false } = {}) {
     const word = tok.text;
     const ctxPinyin = tokenPinyin(tok);
     const entries = S.dict ? S.dict.lookup(word) : [];
     const chars = tok.chars.length > 1 ? h('div', { class: 'zimu-chars' }, tok.chars.map((c, k) => {
       const ce = S.dict ? S.dict.lookup(c)[0] : null;
-      return h('div', { class: 'zimu-char', title: 'Look up', onclick: () => wordPopup({ text: c, chars: [c], py: [tok.py[k]] }, anchorRect) },
+      const sub = { text: c, chars: [c], py: [tok.py[k]], from: tok.from != null ? tok.from + k : null, to: tok.from != null ? tok.from + k + 1 : null };
+      return h('div', { class: 'zimu-char', title: 'Look up', onclick: () => wordPopup(sub, anchorRect) },
         h('span', { class: 'zimu-char-h' }, c), h('span', { class: 'zimu-char-py' }, tok.py[k]),
         h('span', { class: 'zimu-muted' }, ce ? ce.defs.slice(0, 2).join('; ') : ''));
     })) : null;
     const shownIdx = S.shown;
+    const hear = tok.from != null
+      ? h('button', { class: 'zimu-btn', title: 'Play where it’s said (estimated)', onclick: () => playSpan(shownIdx, tok.from, tok.to) }, '▶ Hear it')
+      : null;
     const card = async () => ({
       kind: 'word',
       hanzi: word,
@@ -440,11 +497,13 @@
       chars,
       h('div', { class: 'zimu-actions' },
         saveButton(word, card),
+        hear,
         h('button', { class: 'zimu-btn', onclick: () => gotoLine('repeat') }, '↻ Replay line'))),
     anchorRect);
+    if (autoplay && hear && S.settings.playWordOnClick) playSpan(shownIdx, tok.from, tok.to);
   }
 
-  function phrasePopup(toks, anchorRect) {
+  function phrasePopup(toks, anchorRect, span, { autoplay = false } = {}) {
     const text = toks.map((t) => t.text).join('');
     const py = toks.filter((t) => t.han).map(tokenPinyin).join(' ');
     const tr = h('div', { class: 'zimu-translation' }, 'Translating…');
@@ -474,8 +533,10 @@
       })),
       h('div', { class: 'zimu-actions' },
         saveButton(text, card),
+        h('button', { class: 'zimu-btn', title: 'Play where it’s said (estimated)', onclick: () => playSpan(shownIdx, span.from, span.to) }, '▶ Hear it'),
         h('button', { class: 'zimu-btn', onclick: () => gotoLine('repeat') }, '↻ Replay line'))),
     anchorRect);
+    if (autoplay && S.settings.playWordOnClick) playSpan(shownIdx, span.from, span.to);
   }
 
   // ---- word clicks and drag-to-select --------------------------------------
@@ -516,8 +577,8 @@
     const [lo, hi] = a <= b ? [a, b] : [b, a];
     const els = [...zhBox.querySelectorAll('.zimu-sel')];
     const rect = els.length ? unionRect(els) : e.target.getBoundingClientRect();
-    if (lo === hi) wordPopup(S.tokens[lo], rect);
-    else phrasePopup(phraseTokens(lo, hi), rect);
+    if (lo === hi) wordPopup(S.tokens[lo], rect, { autoplay: true });
+    else phrasePopup(phraseTokens(lo, hi), rect, { from: S.tokens[lo].from, to: S.tokens[hi].to }, { autoplay: true });
   }, true);
   // Swallow clicks on the overlay so Jellyfin doesn't toggle play/pause.
   root.addEventListener('click', (e) => e.stopPropagation());
@@ -584,14 +645,20 @@
       h('label', { class: 'zimu-field' }, 'Chinese', zhSel),
       h('label', { class: 'zimu-field' }, 'English', enSel),
       h('div', { class: 'zimu-panel-title' }, 'Behaviour'),
+      check('playWordOnClick', 'Play a word from the video when I click it'),
       check('pauseOnHover', 'Pause while the mouse is over the subtitles'),
       check('autoPause', 'Pause at the end of each line (Q)'),
       check('hideNativeSubs', 'Hide Jellyfin’s own subtitles'),
       check('toneColors', 'Colour by tone'),
       check('machineTranslate', 'Machine-translate when there is no English track'),
+      h('label', { class: 'zimu-range' }, `Speed ${clampSpeed(st.speed)}%`,
+        h('input', { type: 'range', min: 60, max: 100, step: 1, value: clampSpeed(st.speed), oninput: (e) => {
+          e.target.parentNode.firstChild.textContent = `Speed ${e.target.value}%`;
+          setSpeed(Number(e.target.value));
+        } })),
       range('fontSize', 'Size', 18, 64),
       range('bottom', 'Height', 2, 60),
-      h('div', { class: 'zimu-muted' }, 'Keys: A previous · S repeat · D next · Q auto-pause · Esc close'));
+      h('div', { class: 'zimu-muted' }, 'Keys: A previous · S repeat · D next · Q auto-pause · [ ] speed ±1% ({ } ±5%) · Esc close'));
     root.append(panel);
   }
 
@@ -743,7 +810,9 @@
       if (S.holds.size) { S.holds.clear(); S.weePaused = false; }
       kick();
     },
+    loadedmetadata: () => applySpeed(),
     playing: () => {
+      applySpeed();
       if (!S.itemId || Date.now() - S.lastSync > 3000) syncNowPlaying('start');
       if (S.pendingClip && S.pendingClip.itemId === S.itemId && S.zh.length) startPendingClip();
       kick();
@@ -813,7 +882,11 @@
     const tag = (e.target && e.target.tagName) || '';
     if (/INPUT|TEXTAREA|SELECT/.test(tag) || (e.target && e.target.isContentEditable)) return;
     const k = e.key.toLowerCase();
-    const act = { a: () => gotoLine('prev'), s: () => gotoLine('repeat'), d: () => gotoLine('next'), q: toggleAutoPause }[k];
+    const sp = S.settings.speed;
+    const act = {
+      a: () => gotoLine('prev'), s: () => gotoLine('repeat'), d: () => gotoLine('next'), q: toggleAutoPause,
+      '[': () => setSpeed(sp - 1), ']': () => setSpeed(sp + 1), '{': () => setSpeed(sp - 5), '}': () => setSpeed(sp + 5),
+    }[k];
     if (e.key === 'Escape' && (popup || panel)) { closePopup(); togglePanel(false); }
     else if (act) act();
     else return;
@@ -829,9 +902,11 @@
   Z.Cards.onChange((cards) => { S.saved = new Set(cards.map((c) => c.hanzi)); render(true); });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.settings) {
+      const speed = S.settings.speed;
       S.settings = { ...Z.DEFAULT_SETTINGS, ...changes.settings.newValue };
+      if (S.speedPending) S.settings.speed = speed; // a newer local value is waiting to save
       applySettings();
-      if (panel) { togglePanel(false); togglePanel(true); }
+      if (panel && !panel.contains(document.activeElement)) { togglePanel(false); togglePanel(true); }
     }
   });
   window.addEventListener('hashchange', checkHashClip);

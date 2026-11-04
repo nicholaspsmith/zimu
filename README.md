@@ -54,6 +54,10 @@ Zen/Firefox.
   Jellyfin's own subtitles come back, so set those to Off in Jellyfin's menu
   if you want none. Zimu remembers it for the whole series (or the film);
   **Z** again, or picking a Chinese track, turns it back on.
+- **No subtitles to show**: on a video with no subtitles Zimu leaves only its
+  switch, disabled, in Jellyfin's bar (hover it for the reason), and playback
+  stays at 100%. If the video has text tracks but none is marked Chinese, the
+  settings button stays too, so you can pick one by hand.
 - **Under the subtitles** (on hover): ⏮ previous line, ▶/⏸ play/pause,
   ⏭ next line, Auto-pause. Keys like LLN: **A** previous, **S** repeat,
   **D** next, **Q** auto-pause.

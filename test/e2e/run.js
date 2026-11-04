@@ -76,6 +76,17 @@ async function waitFor(fn, ms = 8000, step = 100) {
         window.__pauses.push([e.target.currentTime.toFixed(2), new Error().stack.split('\n').slice(2, 4).join(' / ')]);
       }, true);
     });
+    // a frozen overlay left by an older copy of the extension (Zen keeps it
+    // in open tabs across an update) is cleared when Zimu starts
+    await page.evaluateOnNewDocument(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        const stale = document.createElement('div');
+        stale.id = 'zimu-root';
+        stale.className = 'zimu-stale';
+        stale.textContent = '旧字幕';
+        document.body.append(stale);
+      });
+    });
     await page.goto(`${BASE}/web/index.html#/video`);
 
     const shown = await waitFor(() => page.evaluate(() => document.querySelectorAll('#zimu-root:not(.zimu-hidden) .zimu-w').length), 15000);
@@ -294,6 +305,76 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await sleep(400);
     const t = await page.evaluate(() => document.querySelector('video').currentTime);
     check('A jumps to previous line', t >= 0.3 && t < 1.5, t.toFixed(2));
+    check('a frozen overlay from an older Zimu is cleared', await page.evaluate(() => !document.querySelector('.zimu-stale') && document.querySelectorAll('#zimu-root').length === 1));
+
+    // Z switches Zimu off for this show: no overlay, no auto-pause, no speed,
+    // Jellyfin's own subtitles back; it stays off after a reload
+    await page.keyboard.press('q'); // auto-pause on, to prove it stops pausing
+    await sleep(300);
+    await page.keyboard.press('z');
+    await sleep(300);
+    const offState = () => page.evaluate(() => {
+      const vis = (sel) => { const el = document.querySelector(sel); return !!el && getComputedStyle(el).display !== 'none'; };
+      return {
+        lines: vis('#zimu-root .zimu-lines'),
+        nativeHidden: document.documentElement.classList.contains('zimu-hide-native'),
+        speedBox: vis('.zimu-osd .zimu-speed-box'),
+        tune: vis('.zimu-osd .zimu-osd-tune'),
+        rate: document.querySelector('video').playbackRate,
+      };
+    });
+    const off1 = await offState();
+    const flashText = await page.evaluate(() => (document.querySelector('.zimu-flash') || {}).textContent || '');
+    await page.evaluate(() => { const v = document.querySelector('video'); v.currentTime = 5.0; v.play(); });
+    await sleep(1600);
+    const playedThrough = await page.evaluate(() => { const v = document.querySelector('video'); return [!v.paused, v.currentTime]; });
+    check('Z turns Zimu off: overlay and speed gone, tune stays, Jellyfin subs back, 100% speed',
+      !off1.lines && !off1.nativeHidden && !off1.speedBox && off1.tune && off1.rate === 1 && /off for this show/.test(flashText),
+      `${JSON.stringify(off1)} "${flashText}"`);
+    check('…and auto-pause stops pausing', playedThrough[0] && playedThrough[1] > 6.2, playedThrough.join(' '));
+    await page.reload();
+    await waitFor(() => page.evaluate(() => /item=item1 zh=[1-9]/.test((document.getElementById('zimu-root') || { dataset: {} }).dataset.state || '')));
+    await sleep(300);
+    const off2 = await offState();
+    check('off is remembered for the show after a reload', !off2.lines && !off2.nativeHidden, JSON.stringify(off2));
+    await page.click('.zimu-osd .zimu-osd-tune');
+    const zhChoice = await page.evaluate(() => { const s = document.querySelector('.zimu-panel select'); return s && s.value; });
+    check('the Chinese track menu shows Off for this show', zhChoice === 'off', String(zhChoice));
+    await page.evaluate(() => {
+      const s = document.querySelector('.zimu-panel select');
+      const opt = [...s.options].find((o) => o.value !== 'off');
+      s.value = opt.value;
+      s.dispatchEvent(new Event('change'));
+    });
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.2; });
+    await sleep(400);
+    const on = await offState();
+    const onText = await page.evaluate(() => document.querySelector('.zimu-zh').textContent);
+    check('picking a track turns it back on', on.lines && on.nativeHidden && on.speedBox && /吃.*饭/.test(onText), `${JSON.stringify(on)} "${onText.slice(0, 20)}"`);
+    await page.keyboard.press('z');
+    await sleep(200);
+    await page.keyboard.press('z');
+    await sleep(200);
+    check('Z toggles it off and on again', (await offState()).lines);
+    // the Zimu switch in Jellyfin's bar does the same
+    const sw = () => page.evaluate(() => {
+      const b = document.querySelector('.zimu-osd .zimu-osd-toggle');
+      return b && { text: b.textContent, checked: b.getAttribute('aria-checked'), visible: getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().width > 0 };
+    });
+    const swOn = await sw();
+    await page.click('.zimu-osd .zimu-osd-toggle');
+    await sleep(300);
+    const swOff = await sw();
+    const linesAfterSwitch = (await offState()).lines;
+    await page.screenshot({ path: path.join(OUT, '3b-zimu-switch-off.png') });
+    await page.click('.zimu-osd .zimu-osd-toggle');
+    await sleep(300);
+    check('a “Zimu” switch in Jellyfin’s bar turns it off and on', swOn && swOn.text === 'Zimu' && swOn.checked === 'true' &&
+      swOff && swOff.visible && swOff.checked === 'false' && !linesAfterSwitch && (await offState()).lines, `${JSON.stringify(swOn)} → ${JSON.stringify(swOff)}`);
+    await page.keyboard.press('q'); // auto-pause back off
+    await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 0.7; }); // where A left it
+    await sleep(300);
 
     // the 🗂 button in Jellyfin's bar opens the flashcard page
     await page.click('.zimu-osd button[title="Zimu flashcards"]');

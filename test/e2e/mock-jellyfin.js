@@ -107,7 +107,7 @@ function start(port, videoPath) {
         PlayState: { MediaSourceId: 'ms1' } }]);
     }
     if (p === '/Items/item1') {
-      return json(200, { Id: 'item1', Type: 'Episode', SeriesName: '测试剧', ParentIndexNumber: 1, IndexNumber: 2, Name: 'Pilot',
+      return json(200, { Id: 'item1', Type: 'Episode', SeriesId: 'series1', SeriesName: '测试剧', ParentIndexNumber: 1, IndexNumber: 2, Name: 'Pilot',
         MediaSources: [{ Id: 'ms1', MediaStreams: [
           { Type: 'Video', Index: 0 }, { Type: 'Audio', Index: 1 },
           { Type: 'Subtitle', Index: 2, Language: 'chi', DisplayTitle: 'Chinese (Simplified)', IsTextSubtitleStream: true },

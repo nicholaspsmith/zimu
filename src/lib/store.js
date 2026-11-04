@@ -23,6 +23,7 @@
     hideNativeSubs: true,
     toneColors: false,
     machineTranslate: true, // when no English subtitle track exists
+    offShows: [], // series (or film) ids Zimu is switched off for, newest last
   };
 
   const Settings = {

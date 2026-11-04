@@ -47,6 +47,13 @@ Zen/Firefox.
   review, and **▶ Play** jumps your Jellyfin tab to that line and stops at
   its end so you can hear it again. Export to Anki (each row carries a link
   that plays the moment) or back up/restore as JSON.
+- **Off for this show**: flip the **Zimu** switch at the start of Zimu's
+  controls in Jellyfin's bar, press **Z**, or pick *Off for this show* in
+  ⚙'s Chinese menu, when you're watching something you don't need Zimu for. Its
+  subtitles, auto-pause and speed go away (playback returns to 100%) and
+  Jellyfin's own subtitles come back, so set those to Off in Jellyfin's menu
+  if you want none. Zimu remembers it for the whole series (or the film);
+  **Z** again, or picking a Chinese track, turns it back on.
 - **Under the subtitles** (on hover): ⏮ previous line, ▶/⏸ play/pause,
   ⏭ next line, Auto-pause. Keys like LLN: **A** previous, **S** repeat,
   **D** next, **Q** auto-pause.
@@ -82,7 +89,7 @@ npm run build      # fetches CC-CEDICT, vendors pinyin-pro,
 **Chrome / Brave:** `chrome://extensions` → Developer mode → Load unpacked →
 pick `~/Code/zimu/src`.
 
-**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.8.0.xpi` onto
+**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.9.1.xpi` onto
 the browser (unsigned add-ons need `xpinstall.signatures.required = false`
 in `about:config`), or load `src/manifest.json` temporarily from
 `about:debugging` → This Firefox.

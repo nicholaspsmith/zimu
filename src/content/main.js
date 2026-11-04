@@ -5,6 +5,12 @@
   if (window.__zimu) return;
   window.__zimu = true;
 
+  // An update or reload of the extension starts a new copy of this script in
+  // tabs that are already open (Firefox/Zen); the old copy's overlay and bar
+  // buttons stay in the page, frozen. Clear them so only this copy's show.
+  document.querySelectorAll('#zimu-root, .zimu-osd, .zimu-flash').forEach((el) => el.remove());
+  document.documentElement.classList.remove('zimu-hide-native');
+
   const Z = globalThis.Zimu;
   const J = Z.Jellyfin;
   const PY = globalThis.pinyinPro;
@@ -20,6 +26,7 @@
     mediaSourceId: null,
     subs: [], // subtitle streams of the current item
     zhTrack: null, // stream index
+    showKey: null, // series id (or the item's own, for a film): Off is remembered per show
     enMode: 'none', // stream index (number) | 'embedded' | 'mt' | 'none'
     zh: [], // cues; each may carry .en from a bilingual track
     en: [],
@@ -253,9 +260,31 @@
   const settingsBtn = osdButton('tune', 'tune', 'Zimu subtitle settings', (_e, b) => togglePanel(undefined, b));
   const slowerBtn = osdButton('remove', 'remove', 'Slower by 1% — hold to keep going ([)', () => {});
   const fasterBtn = osdButton('add', 'add', 'Faster by 1% — hold to keep going (])', () => {});
+  settingsBtn.classList.add('zimu-osd-tune');
   holdToRepeat(slowerBtn, () => setSpeed(S.settings.speed - 1));
   holdToRepeat(fasterBtn, () => setSpeed(S.settings.speed + 1));
+  // The on/off switch: Zimu for this show (remembered per series).
+  const zimuSwitch = h('button', {
+    type: 'button',
+    class: 'zimu-osd-toggle',
+    role: 'switch',
+    onclick: (e) => { e.stopPropagation(); setOff(!isOff()); },
+  }, h('span', { class: 'zimu-switch-label' }, 'Zimu'), h('span', { class: 'zimu-switch-track' }, h('span', { class: 'zimu-switch-knob' })));
+
+  function paintSwitch() {
+    const can = !!S.showKey && S.zh.length > 0;
+    const on = can && !isOff();
+    zimuSwitch.disabled = !can;
+    zimuSwitch.classList.toggle('zimu-on', on);
+    zimuSwitch.setAttribute('aria-checked', String(on));
+    const title = !can ? 'Zimu: no Chinese subtitles on this video'
+      : on ? 'Zimu is on — click to turn it off for this show (Z)' : 'Zimu is off for this show — click to turn it on (Z)';
+    zimuSwitch.title = title;
+    zimuSwitch.setAttribute('aria-label', title);
+  }
+
   const osdGroup = h('div', { class: 'zimu-osd' },
+    zimuSwitch,
     slowerBtn,
     speedBox,
     fasterBtn,
@@ -304,14 +333,47 @@
     if (ms) S.statusTimer = setTimeout(() => { statusEl.textContent = ''; }, ms);
   }
 
+  // Off for this show: no overlay, no auto-pause or speed, Jellyfin's own
+  // subtitles back. Remembered per series so the next episode stays off.
+  const OFF_SHOWS_KEPT = 500;
+  const isOff = () => !!S.showKey && (S.settings.offShows || []).includes(S.showKey);
+
+  function setOff(off) {
+    if (!S.showKey || off === isOff()) return;
+    const rest = (S.settings.offShows || []).filter((k) => k !== S.showKey);
+    const offShows = off ? [...rest, S.showKey].slice(-OFF_SHOWS_KEPT) : rest;
+    S.settings.offShows = offShows;
+    Z.Settings.set({ offShows });
+    if (off) { closePopup(); closeExplain(); }
+    applySettings();
+    if (panel) { togglePanel(false); togglePanel(true); }
+    setStatus(off ? '' : 'Zimu on', 2000);
+    if (off) flash('Zimu off for this show · Z turns it back on');
+  }
+
+  // A short notice while the overlay itself is hidden.
+  let flashEl = null;
+  let flashTimer = 0;
+  function flash(text) {
+    if (!flashEl) flashEl = h('div', { class: 'zimu-flash' });
+    flashEl.textContent = text;
+    document.body.append(flashEl);
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => flashEl.remove(), 2500);
+  }
+
   function applySettings() {
     const st = S.settings;
+    const off = isOff();
+    root.classList.toggle('zimu-off', off);
+    osdGroup.classList.toggle('zimu-off', off);
+    paintSwitch();
     root.style.setProperty('--zimu-size', `${st.fontSize}px`);
     root.style.setProperty('--zimu-bottom', `${st.bottom}vh`);
     root.style.setProperty('--zimu-text-alpha', String(st.textOpacity / 100));
     root.style.setProperty('--zimu-bg-alpha', String(st.bgOpacity / 100));
     root.classList.toggle('zimu-tones', !!st.toneColors);
-    document.documentElement.classList.toggle('zimu-hide-native', !!st.hideNativeSubs && !!S.video && S.zhTrack != null);
+    document.documentElement.classList.toggle('zimu-hide-native', !!st.hideNativeSubs && !!S.video && S.zhTrack != null && !off);
     autoBtn.classList.toggle('zimu-on', !!st.autoPause);
     paintSpeed(st.speed);
     applySpeed();
@@ -380,7 +442,7 @@
   function render(force) {
     const v = S.video;
     root.dataset.state = `item=${S.itemId || '-'} zh=${S.zh.length} shown=${S.shown} dict=${S.dict ? 'y' : 'n'}`;
-    if (!v || !S.zh.length) {
+    if (!v || !S.zh.length || isOff()) {
       if (S.shown !== -1 || force) { zhBox.textContent = ''; enBox.textContent = ''; S.shown = -1; }
       return;
     }
@@ -422,7 +484,7 @@
       S.clipEnd = null;
       v.pause();
     }
-    if (S.settings.autoPause && !v.paused && S.zh.length) {
+    if (S.settings.autoPause && !v.paused && S.zh.length && !isOff()) {
       const i = Z.activeIndex(S.zh, t);
       const cue = S.zh[i];
       if (cue && t >= cue.end - 0.08 && S.autoPausedIdx !== i) {
@@ -469,7 +531,7 @@
     const v = S.video;
     if (!v) return;
     v.preservesPitch = true; // slow the speech without lowering the voice
-    const rate = clampSpeed(S.settings.speed) / 100;
+    const rate = isOff() ? 1 : clampSpeed(S.settings.speed) / 100;
     if (Math.abs(v.playbackRate - rate) > 0.001) v.playbackRate = rate;
   }
 
@@ -942,7 +1004,7 @@
   async function syncExplain() {
     const i = S.anchor;
     if (explainPanel && Number(explainPanel.dataset.cue) !== i) closeExplain();
-    if (i < 0 || explainPanel || !S.settings.explainOnHover) return;
+    if (i < 0 || explainPanel || !S.settings.explainOnHover || isOff()) return;
     const key = explainKey(i);
     if (!key || S.dismissedKeys.has(key)) return;
     let known = explainJobs.has(key);
@@ -979,9 +1041,16 @@
     const check = (key, label) => h('label', { class: 'zimu-check' },
       h('input', { type: 'checkbox', checked: !!st[key], onchange: (e) => Z.Settings.set({ [key]: e.target.checked }) }), label);
     const zhOpts = S.subs.filter((s) => s.text);
-    const zhSel = h('select', { onchange: (e) => chooseTracks(Number(e.target.value), 'auto') },
-      zhOpts.length ? null : h('option', null, 'No text subtitles'),
-      zhOpts.map((s) => h('option', { value: s.index, selected: s.index === S.zhTrack }, s.title)));
+    const off = isOff();
+    const zhSel = h('select', { onchange: (e) => {
+      const v = e.target.value;
+      e.target.blur(); // so Z and the other keys work straight away
+      if (v === 'off') return setOff(true);
+      setOff(false);
+      if (Number(v) !== S.zhTrack) chooseTracks(Number(v), 'auto');
+    } },
+    zhOpts.length ? h('option', { value: 'off', selected: off }, 'Off for this show (Z)') : h('option', null, 'No text subtitles'),
+    zhOpts.map((s) => h('option', { value: s.index, selected: !off && s.index === S.zhTrack }, s.title)));
     const enSel = h('select', { onchange: (e) => {
       const v = e.target.value;
       chooseTracks(S.zhTrack, /^\d+$/.test(v) ? Number(v) : v);
@@ -1019,7 +1088,7 @@
       range('bgOpacity', 'Background', 0, 100, '%'),
       range('fontSize', 'Size', 18, 64, 'px'),
       range('bottom', 'Height', 2, 60, '%'),
-      h('div', { class: 'zimu-muted' }, 'Keys: A previous · S repeat · D next · Q auto-pause · [ ] speed ±1% ({ } ±5%) · Esc close'));
+      h('div', { class: 'zimu-muted' }, 'Keys: Z on/off · A previous · S repeat · D next · Q auto-pause · [ ] speed ±1% ({ } ±5%) · Esc close'));
     root.append(panel);
     const a = S.panelAnchor;
     if (a && a.isConnected) {
@@ -1061,6 +1130,7 @@
     S.zh = [];
     S.en = [];
     S.zhTrack = null;
+    S.showKey = null;
     S.shown = -2;
     S.autoPausedIdx = -1;
     render(true);
@@ -1071,6 +1141,7 @@
       return;
     }
     S.title = J.itemTitle(S.item);
+    S.showKey = S.item.SeriesId || S.item.Id;
     const { mediaSourceId: msId, subs } = J.subtitleStreams(S.item, mediaSourceId);
     S.mediaSourceId = msId;
     S.subs = subs;
@@ -1109,7 +1180,8 @@
       }
       S.en = typeof enMode === 'number' ? await J.subtitleCues(itemId, S.mediaSourceId, enMode) : [];
       S.enMode = enMode;
-      setStatus(S.zh.length ? `${S.zh.length} lines · ${S.title}` : 'That track has no Chinese text', 4000);
+      if (isOff()) setStatus('', 0);
+      else setStatus(S.zh.length ? `${S.zh.length} lines · ${S.title}` : 'That track has no Chinese text', 4000);
       loadDict();
       applySettings();
       if (S.pendingClip && S.pendingClip.itemId === itemId) startPendingClip();
@@ -1220,6 +1292,7 @@
     S.itemId = null;
     S.zh = [];
     S.zhTrack = null;
+    S.showKey = null;
     S.holds.clear();
     closePopup();
     closeExplain();
@@ -1270,7 +1343,7 @@
     if (/INPUT|TEXTAREA|SELECT/.test(tag) || (e.target && e.target.isContentEditable)) return;
     const k = e.key.toLowerCase();
     const sp = S.settings.speed;
-    const act = {
+    const act = k === 'z' ? (S.showKey && S.zh.length ? () => setOff(!isOff()) : null) : isOff() ? null : {
       a: () => gotoLine('prev'), s: () => gotoLine('repeat'), d: () => gotoLine('next'), q: toggleAutoPause,
       '[': () => setSpeed(sp - 1), ']': () => setSpeed(sp + 1), '{': () => setSpeed(sp - 5), '}': () => setSpeed(sp + 5),
     }[k];

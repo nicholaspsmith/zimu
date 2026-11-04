@@ -561,6 +561,54 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const stopped = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused ? v.currentTime : null; }), 6000, 50);
     check('clip stops at the end of the line', stopped != null && stopped >= 5.9 && stopped < 6.6, String(stopped));
 
+    // nothing for Zimu to show: only the disabled switch, and the video stays clear
+    await cardsSet({ speed: 85 });
+    const plain = await browser.newPage();
+    const plainUi = () => plain.evaluate(() => {
+      const vis = (el) => !!el && el.getClientRects().length > 0;
+      const sw = document.querySelector('.zimu-osd-toggle');
+      return {
+        toolbar: vis(document.querySelector('.zimu-toolbar')),
+        lines: vis(document.querySelector('.zimu-lines')),
+        rest: [...document.querySelectorAll('.zimu-osd > *')].filter((el) => el !== sw && vis(el)).map((el) => el.title || el.className),
+        sw: sw && { visible: vis(sw), disabled: sw.disabled, title: sw.title },
+        rate: document.querySelector('video').playbackRate,
+      };
+    });
+    const eatsKey = (key) => plain.evaluate((k) => {
+      const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+      document.body.dispatchEvent(e);
+      return e.defaultPrevented;
+    }, key);
+    const settledOn = (re) => waitFor(async () => {
+      const ui = await plainUi();
+      return ui.sw && re.test(ui.sw.title) ? ui : null;
+    }, 6000);
+    state.item = 'item-no-subs';
+    await plain.goto(`${BASE}/web/index.html#/video`);
+    const noSubs = (await settledOn(/This video has no subtitles/)) || (await plainUi());
+    await plain.screenshot({ path: path.join(OUT, '10-no-subtitles.png') });
+    check('no subtitles: only the disabled switch shows, nothing over the video, 100% speed, keys go to Jellyfin',
+      !noSubs.toolbar && !noSubs.lines && !noSubs.rest.length && noSubs.sw.visible && noSubs.sw.disabled && noSubs.rate === 1 && !(await eatsKey('q')), JSON.stringify(noSubs));
+
+    // tracks exist but none is Chinese: the track menu stays reachable to pick one
+    state.item = 'item-english-only';
+    await plain.reload();
+    const noZh = (await settledOn(/No Chinese subtitle track/)) || (await plainUi());
+    check('no Chinese track: the switch and track menu only, nothing over the video',
+      !noZh.toolbar && !noZh.lines && noZh.rest.length === 1 && /subtitle settings/.test(noZh.rest[0]) && noZh.sw.disabled, JSON.stringify(noZh));
+
+    // the next video in the same tab has Chinese subtitles: everything comes back
+    state.item = 'item1';
+    await plain.evaluate(() => { const v = document.querySelector('video'); v.load(); v.play(); });
+    const restored = await waitFor(async () => {
+      const ui = await plainUi();
+      return ui.toolbar && ui.lines && ui.rest.length > 1 && !ui.sw.disabled && Math.abs(ui.rate - 0.85) < 1e-9 ? ui : null;
+    }, 6000);
+    check('Zimu comes back on the next video with Chinese subtitles', !!restored, JSON.stringify(restored || (await plainUi())));
+    await plain.close();
+    await cardsSet({ speed: 100 });
+
     // a clip link in a fresh tab (nothing playing yet) goes through the
     // server's remote-play command
     state.playing = false;

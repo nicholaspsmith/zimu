@@ -277,7 +277,7 @@
     zimuSwitch.disabled = !can;
     zimuSwitch.classList.toggle('zimu-on', on);
     zimuSwitch.setAttribute('aria-checked', String(on));
-    const title = !can ? 'Zimu: no Chinese subtitles on this video'
+    const title = !can ? S.status || 'Zimu: no Chinese subtitles on this video'
       : on ? 'Zimu is on — click to turn it off for this show (Z)' : 'Zimu is off for this show — click to turn it on (Z)';
     zimuSwitch.title = title;
     zimuSwitch.setAttribute('aria-label', title);
@@ -331,12 +331,16 @@
     statusEl.textContent = text;
     clearTimeout(S.statusTimer);
     if (ms) S.statusTimer = setTimeout(() => { statusEl.textContent = ''; }, ms);
+    paintSwitch(); // with no lines to show, the switch's tooltip says why
   }
 
   // Off for this show: no overlay, no auto-pause or speed, Jellyfin's own
   // subtitles back. Remembered per series so the next episode stays off.
   const OFF_SHOWS_KEPT = 500;
   const isOff = () => !!S.showKey && (S.settings.offShows || []).includes(S.showKey);
+  // Nothing to show (no subtitles, none in Chinese, or still loading): Zimu
+  // stays out of the way, as when off, leaving the disabled switch.
+  const noLines = () => !S.zh.length;
 
   function setOff(off) {
     if (!S.showKey || off === isOff()) return;
@@ -365,8 +369,10 @@
   function applySettings() {
     const st = S.settings;
     const off = isOff();
-    root.classList.toggle('zimu-off', off);
-    osdGroup.classList.toggle('zimu-off', off);
+    root.classList.toggle('zimu-off', off || noLines());
+    osdGroup.classList.toggle('zimu-off', off || noLines());
+    // the track menu stays if there is a text track to pick by hand
+    osdGroup.classList.toggle('zimu-bare', noLines() && !S.subs.some((s) => s.text));
     paintSwitch();
     root.style.setProperty('--zimu-size', `${st.fontSize}px`);
     root.style.setProperty('--zimu-bottom', `${st.bottom}vh`);
@@ -531,7 +537,7 @@
     const v = S.video;
     if (!v) return;
     v.preservesPitch = true; // slow the speech without lowering the voice
-    const rate = isOff() ? 1 : clampSpeed(S.settings.speed) / 100;
+    const rate = isOff() || noLines() ? 1 : clampSpeed(S.settings.speed) / 100;
     if (Math.abs(v.playbackRate - rate) > 0.001) v.playbackRate = rate;
   }
 
@@ -1129,11 +1135,12 @@
     S.itemId = itemId;
     S.zh = [];
     S.en = [];
+    S.subs = [];
     S.zhTrack = null;
     S.showKey = null;
     S.shown = -2;
     S.autoPausedIdx = -1;
-    render(true);
+    applySettings();
     try {
       S.item = await J.item(itemId);
     } catch (e) {
@@ -1259,7 +1266,7 @@
       if (S.pendingClip && S.pendingClip.itemId === S.itemId && S.zh.length) startPendingClip();
       kick();
     },
-    loadstart: () => { S.itemId = null; S.zh = []; S.shown = -2; render(true); },
+    loadstart: () => { S.itemId = null; S.zh = []; S.shown = -2; applySettings(); },
     seeking: () => {
       if (!S.ourSeek) { S.clipEnd = null; }
       S.ourSeek = false;
@@ -1343,7 +1350,7 @@
     if (/INPUT|TEXTAREA|SELECT/.test(tag) || (e.target && e.target.isContentEditable)) return;
     const k = e.key.toLowerCase();
     const sp = S.settings.speed;
-    const act = k === 'z' ? (S.showKey && S.zh.length ? () => setOff(!isOff()) : null) : isOff() ? null : {
+    const act = k === 'z' ? (S.showKey && S.zh.length ? () => setOff(!isOff()) : null) : isOff() || noLines() ? null : {
       a: () => gotoLine('prev'), s: () => gotoLine('repeat'), d: () => gotoLine('next'), q: toggleAutoPause,
       '[': () => setSpeed(sp - 1), ']': () => setSpeed(sp + 1), '{': () => setSpeed(sp - 5), '}': () => setSpeed(sp + 5),
     }[k];

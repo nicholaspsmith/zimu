@@ -20,6 +20,11 @@ const en = [
   [6.5, 9.5, "Let's study Chinese together!"],
   [10.0, 13.0, "This question isn't easy to answer."],
 ];
+// Videos Zimu has nothing to show for: no subtitles at all, or none in Chinese.
+const otherItems = {
+  'item-no-subs': [],
+  'item-english-only': [{ Type: 'Subtitle', Index: 2, Language: 'eng', DisplayTitle: 'English', IsTextSubtitleStream: true }],
+};
 const events = (rows) => ({ TrackEvents: rows.map(([s, e, t], i) => ({ Id: String(i), StartPositionTicks: s * 1e7, EndPositionTicks: e * 1e7, Text: t })) });
 
 const page = (autoplay) => `<!doctype html><html><head><meta charset="utf-8"><title>Jellyfin</title>
@@ -51,7 +56,7 @@ setInterval(async () => {
 </script></body></html>`;
 
 function start(port, videoPath) {
-  const state = { playing: false, commands: [], log: [], claude: [], prefs: {}, prefPosts: 0 };
+  const state = { item: 'item1', playing: false, commands: [], log: [], claude: [], prefs: {}, prefPosts: 0 };
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://localhost:${port}`);
     const p = url.pathname;
@@ -103,7 +108,7 @@ function start(port, videoPath) {
     if (!authed) return json(401, { error: 'unauthorized' });
     if (p === '/Sessions' && url.searchParams.get('deviceId') === DEVICE) {
       return json(200, [{ Id: 'sess1', DeviceId: DEVICE, UserId: USER,
-        NowPlayingItem: state.playing ? { Id: 'item1', Name: 'Pilot' } : undefined,
+        NowPlayingItem: state.playing ? { Id: state.item, Name: 'Pilot' } : undefined,
         PlayState: { MediaSourceId: 'ms1' } }]);
     }
     if (p === '/Items/item1') {
@@ -113,6 +118,11 @@ function start(port, videoPath) {
           { Type: 'Subtitle', Index: 2, Language: 'chi', DisplayTitle: 'Chinese (Simplified)', IsTextSubtitleStream: true },
           { Type: 'Subtitle', Index: 3, Language: 'eng', DisplayTitle: 'English', IsTextSubtitleStream: true },
         ] }] });
+    }
+    const other = otherItems[p.replace('/Items/', '')];
+    if (other) {
+      return json(200, { Id: p.replace('/Items/', ''), Type: 'Movie', Name: 'Film',
+        MediaSources: [{ Id: 'ms1', MediaStreams: [{ Type: 'Video', Index: 0 }, { Type: 'Audio', Index: 1 }, ...other] }] });
     }
     // per-user custom display preferences (Zimu's sync store); POST replaces
     if (p === '/DisplayPreferences/zimu-sync' && url.searchParams.get('client') === 'zimu') {

@@ -31,10 +31,12 @@ html.zimu-hide-native video::cue {
   -webkit-font-smoothing: antialiased;
 }
 #zimu-root.zimu-hidden { display: none; }
-/* switched off for this show: only the settings panel (to turn it back on) */
+/* switched off for this show, or nothing to show: only the settings panel
+   (to turn it back on, or pick a track) and the switch */
 #zimu-root.zimu-off > .zimu-lines,
 #zimu-root.zimu-off > .zimu-toolbar { display: none; }
 .zimu-osd.zimu-off > :not(.zimu-osd-tune):not(.zimu-osd-toggle) { display: none; }
+.zimu-osd.zimu-bare > :not(.zimu-osd-toggle) { display: none; }
 .zimu-flash {
   position: fixed;
   left: 50%;

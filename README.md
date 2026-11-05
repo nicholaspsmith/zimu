@@ -47,26 +47,27 @@ Zen/Firefox.
   review, and **▶ Play** jumps your Jellyfin tab to that line and stops at
   its end so you can hear it again. Export to Anki (each row carries a link
   that plays the moment) or back up/restore as JSON.
-- **Off for this show**: flip the **Zimu** switch at the start of Zimu's
-  controls in Jellyfin's bar, press **Z**, or pick *Off for this show* in
+- **Off for this show**: flip the **Zimu** switch in Zimu's controls under
+  Jellyfin's, press **Z**, or pick *Off for this show* in
   ⚙'s Chinese menu, when you're watching something you don't need Zimu for. Its
   subtitles, auto-pause and speed go away (playback returns to 100%) and
   Jellyfin's own subtitles come back, so set those to Off in Jellyfin's menu
   if you want none. Zimu remembers it for the whole series (or the film);
   **Z** again, or picking a Chinese track, turns it back on.
 - **No subtitles to show**: on a video with no subtitles Zimu leaves only its
-  switch, disabled, in Jellyfin's bar (hover it for the reason), and playback
+  switch, disabled, under Jellyfin's controls (hover it for the reason), and playback
   stays at 100%. If the video has text tracks but none is marked Chinese, the
-  settings button stays too, so you can pick one by hand.
-- **Under the subtitles** (on hover): ⏮ previous line, ▶/⏸ play/pause,
-  ⏭ next line, Auto-pause. Keys like LLN: **A** previous, **S** repeat,
+  settings button stays too, so you can pick one by hand; the English menu
+  waits until a track with Chinese text is chosen.
+- **In a row under Jellyfin's controls**: the Zimu switch on the left,
+  previous line, Auto-pause, next line and speed in the centre, flashcards
+  and settings on the right, under fullscreen. Subtitles stay at one height,
+  just above those controls, whether the bar is showing or not (⚙ → Height
+  raises them). Keys like LLN: **A** previous, **S** repeat,
   **D** next, **Q** auto-pause.
-- **In Jellyfin's bottom bar**, before its own ⚙: speed, Zimu settings
-  (tune icon) and flashcards (cards icon).
-- **Speed** from 60% to 100% in 1% steps: type a percentage into the box
-  (Enter applies, Esc cancels, ↑/↓ step), click − / +, or hold them to run
-  through the range (it speeds up the longer you hold), or use **[ ]** (1%)
-  and **{ }** (5%). Pitch is kept, so voices sound natural, just slower.
+- **Speed** from 40% to 110% in 1% steps: drag the slider between − and +,
+  click − / +, or hold them to run through the range (it speeds up the longer
+  you hold), or use **[ ]** (1%) and **{ }** (5%). Pitch is kept, so voices sound natural, just slower.
 - **Colour by tone** (⚙): 1 blue, 2 green, 3 orange, 4 red, neutral grey.
 - **Look** (⚙): text and background opacity, size and height.
 - Hovering the subtitles doesn't pause (turn "Pause while the mouse is over

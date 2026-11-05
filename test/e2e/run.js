@@ -92,7 +92,7 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const shown = await waitFor(() => page.evaluate(() => document.querySelectorAll('#zimu-root:not(.zimu-hidden) .zimu-w').length), 15000);
     check('overlay shows segmented words', !!shown, `${shown} words`);
     if (!shown) {
-      console.log('  status:', await page.evaluate(() => { const r = document.querySelector('#zimu-root'); return r ? `${r.dataset.state} | ${r.className} | ${r.querySelector('.zimu-status').textContent} | t=${document.querySelector('video').currentTime}` : 'no root'; }));
+      console.log('  status:', await page.evaluate(() => { const r = document.querySelector('#zimu-root'); return r ? `${r.dataset.state} | ${r.className} | t=${document.querySelector('video').currentTime}` : 'no root'; }));
       console.log('  requests:', state.log.filter((l) => !l.includes('/mock/')).slice(-12).join('\n    '));
     }
 
@@ -169,75 +169,156 @@ async function waitFor(fn, ms = 8000, step = 100) {
     check('hovering the subtitles keeps playing', await page.evaluate(() => !document.querySelector('video').paused));
     await page.mouse.move(10, 10);
 
-    // layout: toolbar under the subtitles with play/pause; speed, settings and
-    // flashcards inside Jellyfin's bar, just before its own settings button
+    // layout: Zimu's controls are a row of their own under Jellyfin's,
+    // lined up with them on the left
     const layout = await page.evaluate(() => {
       const lines = document.querySelector('.zimu-lines').getBoundingClientRect();
-      const tb = document.querySelector('.zimu-toolbar');
       const osd = document.querySelector('.zimu-osd');
       return {
-        below: tb.getBoundingClientRect().top >= lines.bottom,
-        labels: [...tb.querySelectorAll('button')].map((b) => b.title.split(' (')[0]),
-        inBar: !!osd && osd.parentElement.matches('.osdControls .buttons') && osd.nextElementSibling.matches('.btnVideoOsdSettings') &&
+        toolbar: !!document.querySelector('.zimu-toolbar'),
+        labels: [...osd.querySelectorAll('.zimu-osd-btn')].map((b) => b.title.split(' (')[0]),
+        inBar: !!osd && osd.parentElement.matches('.osdControls') && osd.previousElementSibling.matches('.buttons') &&
           !osd.closest('.hide') && osd.getBoundingClientRect().width > 0,
-        fontPx: parseFloat(getComputedStyle(tb.querySelector('button')).fontSize),
+        below: osd.getBoundingClientRect().top >= osd.previousElementSibling.getBoundingClientRect().bottom,
+        leftGap: osd.firstElementChild.getBoundingClientRect().left - osd.previousElementSibling.firstElementChild.getBoundingClientRect().left,
+        rightGap: document.querySelector('.zimu-osd-tune').getBoundingClientRect().right - osd.previousElementSibling.lastElementChild.getBoundingClientRect().right,
+        centreGap: (() => {
+          const row = osd.getBoundingClientRect();
+          const first = osd.querySelector('[title^="Previous line"]').getBoundingClientRect();
+          const last = osd.querySelector('[title^="Faster"]').getBoundingClientRect();
+          return (first.left + last.right) / 2 - (row.left + row.right) / 2;
+        })(),
+        order: [...osd.querySelectorAll('button, .zimu-speed-box')].map((el) => (el.title || el.textContent || el.className).split(' (')[0].split(' —')[0].split(',')[0]),
+        linesBottom: lines.bottom,
       };
     });
-    check('toolbar sits under the subtitles, 20% larger, play/pause instead of repeat', layout.below && layout.fontPx === 15.6 &&
-      JSON.stringify(layout.labels) === JSON.stringify(['Previous line', 'Play / pause', 'Next line', 'Pause at the end of each line']), JSON.stringify(layout));
-    check('speed, settings and flashcards are in the visible Jellyfin bar (not a cached hidden page), before its ⚙', layout.inBar);
-    await page.hover('.zimu-en');
-    await page.mouse.move(640, 760);
-    await page.hover('.zimu-lines .zimu-p');
-    await page.screenshot({ path: path.join(OUT, '7-controls.png') });
+    check('no floating control bar: previous, next and auto-pause are with Zimu’s controls', !layout.toolbar &&
+      ['Previous line', 'Next line', 'Pause at the end of each line'].every((l) => layout.labels.includes(l)), JSON.stringify(layout));
+    check('Zimu’s controls are under the visible Jellyfin controls (not a cached hidden page), aligned left with them',
+      layout.inBar && layout.below && Math.abs(layout.leftGap) <= 1, JSON.stringify(layout));
+    check('the row runs the Zimu switch, line controls, speed, then flashcards and settings under fullscreen',
+      /^Zimu.*,Previous line,Pause at the end of each line,Next line,Slower by 1%,.*,Faster by 1%,Zimu flashcards,Zimu subtitle settings$/.test(layout.order.join(',')) &&
+      Math.abs(layout.rightGap) <= 1, JSON.stringify({ order: layout.order, rightGap: layout.rightGap }));
+    check('the line and speed controls are centred in the bar', Math.abs(layout.centreGap) <= 1, `off by ${layout.centreGap}px`);
 
+    // the subtitles have one fixed height, just above Jellyfin's controls
+    // (its bar's box starts well above them, for the gradient)
+    const setBar = (shown) => page.evaluate((on) => {
+      [...document.querySelectorAll('.videoOsdBottom')].pop().classList.toggle('videoOsdBottom-hidden', !on);
+    }, shown);
+    await setBar(true);
+    await sleep(900);
+    const fixed = await page.evaluate(() => {
+      const lines = document.querySelector('.zimu-lines').getBoundingClientRect();
+      return {
+        linesBottom: lines.bottom,
+        gap: [...document.querySelectorAll('.osdControls')].pop().getBoundingClientRect().top - lines.bottom,
+        limit: window.innerHeight * 0.03,
+      };
+    });
+    await page.screenshot({ path: path.join(OUT, '7-controls.png') });
+    check('subtitles stay at the same height when Jellyfin’s bar shows', fixed.linesBottom === layout.linesBottom, `${layout.linesBottom} → ${fixed.linesBottom}`);
+    check('subtitles sit just above Jellyfin’s controls, never on them', fixed.gap >= 0 && fixed.gap <= fixed.limit, JSON.stringify(fixed));
+
+    const clickBar = (title) => page.click(`.zimu-osd-btn[title^="${title}"]`);
+    await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 1; });
+    await clickBar('Next line');
+    const nexted = await waitFor(() => page.evaluate(() => { const t = document.querySelector('video').currentTime; return t >= 3.2 && t < 5 ? t : null; }), 3000);
+    await clickBar('Previous line');
+    const preved = await waitFor(() => page.evaluate(() => { const t = document.querySelector('video').currentTime; return t >= 0.3 && t < 3 ? t : null; }), 3000);
+    check('previous and next line buttons in the bar move between lines', !!nexted && !!preved, `${nexted} ${preved}`);
     await page.evaluate(() => document.querySelector('video').pause());
-    await page.hover('.zimu-lines');
-    await page.click('.zimu-play');
-    await sleep(300);
-    const playing = await page.evaluate(() => [!document.querySelector('video').paused, document.querySelector('.zimu-play').textContent]);
-    await page.click('.zimu-play');
-    await sleep(300);
-    const paused = await page.evaluate(() => [document.querySelector('video').paused, document.querySelector('.zimu-play').textContent]);
-    check('play/pause button toggles playback', playing[0] && playing[1] === '⏸' && paused[0] && paused[1] === '▶', `${playing} / ${paused}`);
+    await clickBar('Pause at the end');
+    await sleep(200);
+    const autoOn = await page.$eval('.zimu-osd-btn[title^="Pause at the end"]', (b) => b.classList.contains('zimu-on'));
+    await clickBar('Pause at the end');
+    await sleep(200);
+    const autoOff = await page.$eval('.zimu-osd-btn[title^="Pause at the end"]', (b) => b.classList.contains('zimu-on'));
+    check('the auto-pause button shows its state', autoOn && !autoOff, `${autoOn} ${autoOff}`);
+
+    // with the bar tucked away, a key still says what it did
+    await setBar(false);
+    await sleep(900);
+    await page.keyboard.press('q');
+    const keyFlash = await waitFor(() => page.evaluate(() => (document.querySelector('.zimu-flash') || {}).textContent), 1000);
+    await page.keyboard.press('q');
+    check('a key press flashes its result while Jellyfin’s bar is hidden', /Auto-pause on/.test(keyFlash || ''), String(keyFlash));
     await page.mouse.move(10, 10);
 
     const rate = () => page.evaluate(() => document.querySelector('video').playbackRate);
-    const speedValue = () => page.evaluate(() => document.querySelector('.zimu-speed-input').value);
-    async function typeSpeed(text, key = 'Enter') {
-      await page.click('.zimu-speed-input');
-      await page.keyboard.type(text);
-      await page.keyboard.press(key);
+    const speedValue = () => page.evaluate(() => document.querySelector('.zimu-speed-slider').value);
+    const setSlider = async (n) => {
+      await page.$eval('.zimu-speed-slider', (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }, n);
       await sleep(150);
-    }
+    };
 
-    // keys: [ ] step 1%, { } step 5%, clamped to 60–100%
-    await page.keyboard.press(']');
-    await sleep(150);
-    const r100 = await rate();
+    // keys: [ ] step 1%, { } step 5%, clamped to 40–110%
     for (let i = 0; i < 5; i++) await page.keyboard.press('[');
     await sleep(300);
     const r95 = [await rate(), await speedValue()];
-    for (let i = 0; i < 12; i++) await page.keyboard.press('{');
+    for (let i = 0; i < 13; i++) await page.keyboard.press('{');
     await sleep(300);
-    const r60 = await rate();
-    check('speed keys: 60–100% in 1% steps', r100 === 1 && Math.abs(r95[0] - 0.95) < 1e-9 && r95[1] === '95' && Math.abs(r60 - 0.6) < 1e-9, `${r100} ${r95.join(' ')} ${r60}`);
+    const r40 = await rate();
+    for (let i = 0; i < 15; i++) await page.keyboard.press('}');
+    await sleep(300);
+    const r110 = await rate();
+    await page.keyboard.press(']');
+    await sleep(150);
+    check('speed keys: 40–110% in 1% steps', Math.abs(r95[0] - 0.95) < 1e-9 && r95[1] === '95' && Math.abs(r40 - 0.4) < 1e-9 && Math.abs(r110 - 1.1) < 1e-9 && Number(await speedValue()) === 110,
+      `${r95.join(' ')} ${r40} ${r110}`);
+    await setSlider(100);
 
-    // typing a percentage
+    // a slider between − and +, not a number box
+    const speedUi = await page.evaluate(() => {
+      const box = (sel) => document.querySelector(sel).getBoundingClientRect();
+      const el = document.querySelector('.zimu-speed-slider');
+      return {
+        input: !!document.querySelector('.zimu-speed-input'),
+        type: el.type, min: el.min, max: el.max,
+        between: box('.zimu-osd button[title^="Slower"]').right <= box('.zimu-speed-slider').left &&
+          box('.zimu-speed-slider').right <= box('.zimu-osd button[title^="Faster"]').left,
+        readout: document.querySelector('.zimu-speed-box').textContent,
+        widthEm: el.getBoundingClientRect().width / parseFloat(getComputedStyle(el).fontSize),
+        colours: [...new Set(['.zimu-osd-toggle', '.zimu-osd-btn', '.zimu-speed-box'].map((s) => getComputedStyle(document.querySelector(s)).color))],
+      };
+    });
+    check('speed is a 40–110% slider between − and +, showing its value', !speedUi.input && speedUi.type === 'range' && speedUi.min === '40' && speedUi.max === '110' &&
+      speedUi.between && speedUi.readout === '100%', JSON.stringify(speedUi));
+    check('the speed slider is 7.5em long', Math.abs(speedUi.widthEm - 7.5) < 0.01, String(speedUi.widthEm));
+    check('Zimu’s bar controls are the second-tone green', speedUi.colours.length === 1 && speedUi.colours[0] === 'rgb(95, 208, 104)', speedUi.colours.join(' '));
+
+    // dragging it sets the speed and hands the keyboard back
+    const track = await (await page.$('.zimu-speed-slider')).boundingBox();
+    const y = track.y + track.height / 2;
+    await page.mouse.move(track.x + track.width * 0.8, y);
+    await page.mouse.down();
+    await page.mouse.move(track.x + track.width * 0.2, y, { steps: 6 });
+    const midDrag = [await rate(), await speedValue()];
+    await page.mouse.up();
+    await sleep(150);
+    const dragged = await page.evaluate(() => document.activeElement.tagName);
+    const dragSpeed = Number(await speedValue());
+    await page.keyboard.press(']');
+    await sleep(150);
+    check('dragging the slider changes speed live, then keys work again', dragSpeed < 60 && Math.abs(midDrag[0] - Number(midDrag[1]) / 100) < 1e-9 && dragged !== 'INPUT' &&
+      Number(await speedValue()) === dragSpeed + 1, `${midDrag} ${dragged} ${dragSpeed} → ${await speedValue()}`);
+
+    // while it has the keyboard, keys stay with it and never reach Jellyfin
+    await setSlider(100);
+    await page.focus('.zimu-speed-slider');
     const tBefore = await page.evaluate(() => document.querySelector('video').currentTime);
-    await typeSpeed('85');
-    const typed = [await rate(), await speedValue()];
+    await page.keyboard.press('5');
+    await page.keyboard.press('ArrowLeft');
+    await sleep(150);
     const tAfter = await page.evaluate(() => document.querySelector('video').currentTime);
-    await typeSpeed('40');
-    const clamped = [await rate(), await speedValue()];
-    await typeSpeed('77', 'Escape');
-    const escaped = await rate();
-    check('typing a % sets the speed, clamps to 60–100, Esc cancels', Math.abs(typed[0] - 0.85) < 1e-9 && typed[1] === '85' &&
-      Math.abs(clamped[0] - 0.6) < 1e-9 && clamped[1] === '60' && Math.abs(escaped - 0.6) < 1e-9, `${typed} ${clamped} ${escaped}`);
-    check('digits typed into the speed box don’t reach Jellyfin (no seek)', Math.abs(tAfter - tBefore) < 0.05, `${tBefore.toFixed(2)} → ${tAfter.toFixed(2)}`);
+    const arrowed = await speedValue();
+    await page.keyboard.press('Escape');
+    const escaped = await page.evaluate(() => document.activeElement.tagName);
+    check('with the slider focused, arrows step it, keys don’t reach Jellyfin (no seek), Esc leaves it',
+      Math.abs(tAfter - tBefore) < 0.05 && arrowed === '99' && escaped !== 'INPUT', `${tBefore.toFixed(2)} → ${tAfter.toFixed(2)} ${arrowed} ${escaped}`);
 
     // − / +: a click steps 1%, holding repeats faster and faster
-    await typeSpeed('100');
+    await setSlider(100);
     await page.click('.zimu-osd button[title^="Slower"]');
     await sleep(150);
     const oneClick = await speedValue();
@@ -254,7 +335,7 @@ async function waitFor(fn, ms = 8000, step = 100) {
     check('click − steps 1%; holding it accelerates', oneClick === '99' && after700 >= 94 && after700 <= 97 &&
       99 - after1500 >= 12 && settled === after1500, `click→${oneClick}, held 0.7 s→${after700}, 1.5 s→${after1500}, released→${settled}`);
     await page.mouse.move(10, 10);
-    await typeSpeed('100');
+    await setSlider(100);
 
     // ⚙ in Jellyfin's bar opens the settings panel just above it
     await page.click('.zimu-osd button[title="Zimu subtitle settings"]');
@@ -267,6 +348,9 @@ async function waitFor(fn, ms = 8000, step = 100) {
     check('⚙ opens settings above the button', !!panelPos && panelPos.above && Math.abs(panelPos.right) <= 2, JSON.stringify(panelPos));
     // text and background opacity sliders (defaults 100% / 75%)
     const look = () => page.evaluate(() => ({ text: getComputedStyle(document.querySelector('.zimu-zh')).opacity, bg: getComputedStyle(document.querySelector('.zimu-lines')).backgroundColor }));
+    // inside a line: a finished line is dimmed, which would hide the slider's value
+    await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 1.5; });
+    await sleep(300);
     const lookBefore = await look();
     await page.evaluate(() => {
       const set = (label, v) => {
@@ -314,12 +398,13 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await page.keyboard.press('z');
     await sleep(300);
     const offState = () => page.evaluate(() => {
-      const vis = (sel) => { const el = document.querySelector(sel); return !!el && getComputedStyle(el).display !== 'none'; };
+      const vis = (sel) => { const el = document.querySelector(sel); return !!el && el.getClientRects().length > 0; };
       return {
         lines: vis('#zimu-root .zimu-lines'),
         nativeHidden: document.documentElement.classList.contains('zimu-hide-native'),
         speedBox: vis('.zimu-osd .zimu-speed-box'),
         tune: vis('.zimu-osd .zimu-osd-tune'),
+        tuneRight: Math.round(document.querySelector('.zimu-osd-tune').getBoundingClientRect().right - document.querySelector('.btnFullscreen').getBoundingClientRect().right),
         rate: document.querySelector('video').playbackRate,
       };
     });
@@ -329,7 +414,7 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await sleep(1600);
     const playedThrough = await page.evaluate(() => { const v = document.querySelector('video'); return [!v.paused, v.currentTime]; });
     check('Z turns Zimu off: overlay and speed gone, tune stays, Jellyfin subs back, 100% speed',
-      !off1.lines && !off1.nativeHidden && !off1.speedBox && off1.tune && off1.rate === 1 && /off for this show/.test(flashText),
+      !off1.lines && !off1.nativeHidden && !off1.speedBox && off1.tune && Math.abs(off1.tuneRight) <= 1 && off1.rate === 1 && /off for this show/.test(flashText),
       `${JSON.stringify(off1)} "${flashText}"`);
     check('…and auto-pause stops pausing', playedThrough[0] && playedThrough[1] > 6.2, playedThrough.join(' '));
     await page.reload();
@@ -568,13 +653,28 @@ async function waitFor(fn, ms = 8000, step = 100) {
       const vis = (el) => !!el && el.getClientRects().length > 0;
       const sw = document.querySelector('.zimu-osd-toggle');
       return {
-        toolbar: vis(document.querySelector('.zimu-toolbar')),
         lines: vis(document.querySelector('.zimu-lines')),
-        rest: [...document.querySelectorAll('.zimu-osd > *')].filter((el) => el !== sw && vis(el)).map((el) => el.title || el.className),
+        rest: [...document.querySelectorAll('.zimu-osd button, .zimu-osd .zimu-speed-box')].filter((el) => el !== sw && vis(el)).map((el) => el.title || el.className),
         sw: sw && { visible: vis(sw), disabled: sw.disabled, title: sw.title },
         rate: document.querySelector('video').playbackRate,
       };
     });
+    // what the two track menus in the settings panel offer
+    const readMenus = () => plain.evaluate(() => {
+      const [zh, en] = [...document.querySelectorAll('.zimu-panel select')].map((s) => ({
+        disabled: s.disabled,
+        chosen: s.selectedOptions[0] && s.selectedOptions[0].textContent,
+        options: [...s.options].map((o) => o.textContent),
+      }));
+      return { zh, en };
+    });
+    const clickTune = () => plain.evaluate(() => document.querySelector('.zimu-osd-tune').click());
+    const trackMenus = async () => {
+      await clickTune();
+      const menus = await readMenus();
+      await clickTune();
+      return menus;
+    };
     const eatsKey = (key) => plain.evaluate((k) => {
       const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
       document.body.dispatchEvent(e);
@@ -589,23 +689,47 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const noSubs = (await settledOn(/This video has no subtitles/)) || (await plainUi());
     await plain.screenshot({ path: path.join(OUT, '10-no-subtitles.png') });
     check('no subtitles: only the disabled switch shows, nothing over the video, 100% speed, keys go to Jellyfin',
-      !noSubs.toolbar && !noSubs.lines && !noSubs.rest.length && noSubs.sw.visible && noSubs.sw.disabled && noSubs.rate === 1 && !(await eatsKey('q')), JSON.stringify(noSubs));
+      !noSubs.lines && !noSubs.rest.length && noSubs.sw.visible && noSubs.sw.disabled && noSubs.rate === 1 && !(await eatsKey('q')), JSON.stringify(noSubs));
 
     // tracks exist but none is Chinese: the track menu stays reachable to pick one
     state.item = 'item-english-only';
     await plain.reload();
     const noZh = (await settledOn(/No Chinese subtitle track/)) || (await plainUi());
     check('no Chinese track: the switch and track menu only, nothing over the video',
-      !noZh.toolbar && !noZh.lines && noZh.rest.length === 1 && /subtitle settings/.test(noZh.rest[0]) && noZh.sw.disabled, JSON.stringify(noZh));
+      !noZh.lines && noZh.rest.length === 1 && /subtitle settings/.test(noZh.rest[0]) && noZh.sw.disabled, JSON.stringify(noZh));
+    const noZhMenus = await trackMenus();
+    check('no Chinese track: the menus say so instead of offering a Chinese source that isn’t there',
+      noZhMenus.zh.chosen === 'No Chinese text track' && noZhMenus.zh.options.includes('English') &&
+      noZhMenus.en.disabled && noZhMenus.en.chosen === 'Pick a Chinese track first' && !noZhMenus.en.options.some((o) => /bilingual/.test(o)),
+      JSON.stringify(noZhMenus));
 
     // the next video in the same tab has Chinese subtitles: everything comes back
     state.item = 'item1';
     await plain.evaluate(() => { const v = document.querySelector('video'); v.load(); v.play(); });
     const restored = await waitFor(async () => {
       const ui = await plainUi();
-      return ui.toolbar && ui.lines && ui.rest.length > 1 && !ui.sw.disabled && Math.abs(ui.rate - 0.85) < 1e-9 ? ui : null;
+      return ui.lines && ui.rest.length > 1 && !ui.sw.disabled && Math.abs(ui.rate - 0.85) < 1e-9 ? ui : null;
     }, 6000);
     check('Zimu comes back on the next video with Chinese subtitles', !!restored, JSON.stringify(restored || (await plainUi())));
+    const zhOnlyMenus = await trackMenus();
+    check('a Chinese track with no English in it isn’t offered as an English source',
+      !zhOnlyMenus.en.disabled && zhOnlyMenus.en.chosen === 'English' && !zhOnlyMenus.en.options.some((o) => /bilingual/.test(o)),
+      JSON.stringify(zhOnlyMenus));
+
+    // a bilingual Chinese track is offered, and only while it's the one in use
+    state.item = 'item-bilingual';
+    await plain.reload();
+    await waitFor(async () => { const { sw } = await plainUi(); return sw && !sw.disabled; }, 6000);
+    await clickTune();
+    const bothMenus = await readMenus();
+    check('a bilingual Chinese track is the English source', /bilingual/.test(bothMenus.en.chosen), JSON.stringify(bothMenus));
+    await plain.select('.zimu-panel select', '3');
+    const afterSwitch = await waitFor(async () => {
+      const m = await readMenus();
+      return m.zh.chosen === 'Chinese only' && !m.en.options.some((o) => /bilingual/.test(o)) ? m : null;
+    }, 3000);
+    check('switching to a plain Chinese track updates the open English menu', !!afterSwitch, JSON.stringify(afterSwitch || (await readMenus())));
+    state.item = 'item1';
     await plain.close();
     await cardsSet({ speed: 100 });
 

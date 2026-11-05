@@ -24,6 +24,10 @@ const en = [
 const otherItems = {
   'item-no-subs': [],
   'item-english-only': [{ Type: 'Subtitle', Index: 2, Language: 'eng', DisplayTitle: 'English', IsTextSubtitleStream: true }],
+  'item-bilingual': [
+    { Type: 'Subtitle', Index: 2, Language: 'chi', DisplayTitle: 'Chinese and English', IsTextSubtitleStream: true },
+    { Type: 'Subtitle', Index: 3, Language: 'chi', DisplayTitle: 'Chinese only', IsTextSubtitleStream: true },
+  ],
 };
 const events = (rows) => ({ TrackEvents: rows.map(([s, e, t], i) => ({ Id: String(i), StartPositionTicks: s * 1e7, EndPositionTicks: e * 1e7, Text: t })) });
 
@@ -34,10 +38,10 @@ const page = (autoplay) => `<!doctype html><html><head><meta charset="utf-8"><ti
 <div class="mainAnimatedPage hide" style="display:none"><div class="videoOsdBottom videoOsdBottom-maincontrols">
   <div class="osdControls"><div class="buttons focuscontainer-x"><button class="btnVideoOsdSettings">old settings</button></div></div>
 </div></div>
-<div class="videoOsdBottom videoOsdBottom-maincontrols videoOsdBottom-hidden" style="position:fixed;left:0;right:0;bottom:0;padding:8px;background:rgba(0,0,0,.6);color:#fff;font:16px system-ui">
-  <div class="osdControls"><div class="buttons focuscontainer-x" style="display:flex;align-items:center;gap:6px">
+<div class="videoOsdBottom videoOsdBottom-maincontrols videoOsdBottom-hidden" style="position:fixed;left:0;right:0;bottom:0;padding:90px 8px 8px;pointer-events:none;background:linear-gradient(transparent,rgba(0,0,0,.6));color:#fff;font:16px system-ui">
+  <div class="osdControls" style="pointer-events:auto"><div class="buttons focuscontainer-x" style="display:flex;align-items:center;gap:6px">
     <div dir="ltr"><button class="btnPause">pause</button></div>
-    <div class="osdTimeText"><span class="endsAtText"></span></div>
+    <div class="osdTimeText" style="margin-right:auto"><span class="endsAtText"></span></div>
     <button class="btnVideoOsdSettings" title="Settings">settings</button>
     <button class="btnFullscreen">fullscreen</button>
   </div></div>
@@ -141,6 +145,10 @@ function start(port, videoPath) {
     }
     if (p === '/Videos/item1/ms1/Subtitles/2/Stream.js') return json(200, events(zh));
     if (p === '/Videos/item1/ms1/Subtitles/3/Stream.js') return json(200, events(en));
+    if (p === '/Videos/item-bilingual/ms1/Subtitles/2/Stream.js') {
+      return json(200, events(zh.map(([s, e, t], i) => [s, e, `${t}\n${en[i][2]}`])));
+    }
+    if (p === '/Videos/item-bilingual/ms1/Subtitles/3/Stream.js') return json(200, events(zh));
     if (req.method === 'POST' && p === '/Sessions/sess1/Playing') {
       state.commands.push({ itemIds: url.searchParams.get('itemIds'), startPositionTicks: Number(url.searchParams.get('startPositionTicks')) });
       res.writeHead(204); return res.end();

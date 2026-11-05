@@ -5,7 +5,7 @@
   const Z = root.Zimu || (root.Zimu = {});
   const area = () => chrome.storage.local;
 
-  const SCHEMA = 2;
+  const SCHEMA = 4;
   const DEFAULT_SETTINGS = {
     schema: SCHEMA,
     showHanzi: true,
@@ -14,12 +14,12 @@
     fontSize: 34, // px for hanzi
     textOpacity: 100, // % — subtitle text
     bgOpacity: 75, // % — the box behind the subtitles
-    bottom: 12, // % of the window height
+    bottom: 1, // % of the window height above Jellyfin's controls
     autoPause: false, // pause at the end of every line
     pauseOnHover: false,
     playWordOnClick: true, // clicking a word plays it from the video
     explainOnHover: true, // Claude explains the line when the box (not a word) is clicked
-    speed: 100, // playback speed in %, 60-100
+    speed: 100, // playback speed in %, 40-110
     hideNativeSubs: true,
     toneColors: false,
     machineTranslate: true, // when no English subtitle track exists
@@ -30,9 +30,13 @@
     async get() {
       const r = await area().get('settings');
       const stored = r.settings || {};
-      if ((stored.schema || 1) < 2) {
+      const schema = stored.schema || 1;
+      if (schema < SCHEMA) {
         // 0.2.0: hovering the subtitles no longer pauses by default
-        stored.pauseOnHover = false;
+        if (schema < 2) stored.pauseOnHover = false;
+        // 0.10.0: height now counts from the top of Jellyfin's controls, so
+        // a saved height would sit far too high
+        delete stored.bottom;
         stored.schema = SCHEMA;
         await area().set({ settings: stored });
       }

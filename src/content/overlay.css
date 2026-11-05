@@ -1,5 +1,7 @@
 /* Zimu overlay. Everything is scoped under #zimu-root. */
 
+:root { --zimu-tone2: #5fd068; }
+
 html.zimu-hide-native .videoSubtitles,
 html.zimu-hide-native .videoSecondarySubtitles,
 html.zimu-hide-native .libassjs-canvas-parent,
@@ -14,12 +16,12 @@ html.zimu-hide-native video::cue {
 
 #zimu-root {
   --zimu-size: 34px;
-  --zimu-bottom: 12vh;
-  --zimu-lift: 0px;
+  --zimu-bottom: 1vh;
+  --zimu-bar: 120px; /* height of Jellyfin's controls and our row, measured once they exist */
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(var(--zimu-bottom) + var(--zimu-lift));
+  bottom: calc(var(--zimu-bottom) + var(--zimu-bar));
   z-index: 2147483000;
   display: flex;
   flex-direction: column;
@@ -27,20 +29,19 @@ html.zimu-hide-native video::cue {
   pointer-events: none;
   font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
   color: #fff;
-  transition: bottom 0.2s ease;
   -webkit-font-smoothing: antialiased;
 }
 #zimu-root.zimu-hidden { display: none; }
 /* switched off for this show, or nothing to show: only the settings panel
    (to turn it back on, or pick a track) and the switch */
-#zimu-root.zimu-off > .zimu-lines,
-#zimu-root.zimu-off > .zimu-toolbar { display: none; }
-.zimu-osd.zimu-off > :not(.zimu-osd-tune):not(.zimu-osd-toggle) { display: none; }
-.zimu-osd.zimu-bare > :not(.zimu-osd-toggle) { display: none; }
+#zimu-root.zimu-off > .zimu-lines { display: none; }
+.zimu-osd.zimu-off .zimu-osd-centre,
+.zimu-osd.zimu-off .zimu-osd-end > :not(.zimu-osd-tune),
+.zimu-osd.zimu-bare .zimu-osd-end { display: none; }
 .zimu-flash {
   position: fixed;
   left: 50%;
-  bottom: 14vh;
+  top: 10vh;
   transform: translateX(-50%);
   z-index: 2147483000;
   padding: 0.5em 1em;
@@ -52,23 +53,6 @@ html.zimu-hide-native video::cue {
 }
 #zimu-root * { box-sizing: border-box; }
 
-/* toolbar: appears when hovering the subtitles */
-.zimu-toolbar {
-  pointer-events: auto;
-  display: flex;
-  gap: 5px;
-  align-items: center;
-  margin-top: 6px;
-  padding: 4px 7px;
-  border-radius: 8px;
-  background: rgba(20, 20, 24, 0.72);
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-#zimu-root:hover .zimu-toolbar,
-.zimu-toolbar:has(.zimu-status:not(:empty)) { opacity: 1; }
-.zimu-status { font-size: 13px; color: #cfd3da; padding: 0 6px; white-space: nowrap; }
-
 .zimu-btn {
   all: unset;
   cursor: pointer;
@@ -78,39 +62,73 @@ html.zimu-hide-native video::cue {
   border-radius: 6px;
 }
 .zimu-btn:hover { background: rgba(255, 255, 255, 0.14); }
-.zimu-btn.zimu-on { background: #2f7d5b; color: #fff; }
-.zimu-play { min-width: 2.2em; text-align: center; }
 
-/* our group inside Jellyfin's bottom bar */
-.zimu-osd { display: inline-flex; align-items: center; margin: 0 0.25em; }
-.zimu-speed-box {
-  display: inline-flex;
+/* our row under Jellyfin's buttons: switch at the left end, flashcards and
+   settings at the right, and the rest centred in the bar however wide those
+   two ends are. Fixed columns, so nothing moves when the middle is hidden. */
+.zimu-osd {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  width: 100%;
   align-items: center;
-  gap: 2px;
-  font: 600 1em/1 system-ui, -apple-system, sans-serif;
-  color: inherit;
-  cursor: text;
+  color: var(--zimu-tone2);
 }
-.zimu-speed-input {
-  width: 3.4ch;
-  padding: 3px 4px;
-  font: inherit;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  color: inherit;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 5px;
+.zimu-osd-toggle { grid-column: 1; justify-self: start; }
+.zimu-osd-centre { grid-column: 2; display: flex; align-items: center; }
+.zimu-osd-end { grid-column: 3; display: flex; align-items: center; justify-self: end; }
+.zimu-osd .zimu-osd-btn { color: var(--zimu-tone2); }
+/* Jellyfin turns its bar's buttons blue on hover, press and focus */
+.zimu-osd .zimu-osd-btn:hover:not(:disabled),
+.zimu-osd .zimu-osd-btn:active:not(:disabled),
+.zimu-osd .zimu-osd-btn.show-focus:focus {
+  color: var(--zimu-tone2);
+  background-color: rgba(95, 208, 104, 0.2);
 }
-.zimu-speed-input:focus { outline: none; border-color: #fff; background: rgba(255, 255, 255, 0.18); }
-.zimu-speed-box.zimu-on .zimu-speed-input { background: rgba(47, 125, 91, 0.45); border-color: #3fa274; }
+/* everything is green, so "on" shows as a backdrop */
+.zimu-osd .zimu-osd-btn.zimu-on { background-color: rgba(95, 208, 104, 0.3); }
 
-/* the Zimu on/off switch, first in our group */
+.zimu-speed-box { display: inline-flex; align-items: center; font: 600 1em/1 system-ui, -apple-system, sans-serif; }
+.zimu-speed-readout { min-width: 3.3ch; text-align: right; font-variant-numeric: tabular-nums; }
+.zimu-speed-slider {
+  --zimu-fill: 85.7%;
+  --zimu-track: linear-gradient(to right, var(--zimu-tone2) var(--zimu-fill), rgba(255, 255, 255, 0.25) var(--zimu-fill));
+  width: 7.5em;
+  height: 1.4em;
+  margin: 0 0.5em 0 0.25em;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.zimu-speed-slider:focus { outline: none; }
+.zimu-speed-slider::-webkit-slider-runnable-track { height: 0.25em; border-radius: 0.125em; background: var(--zimu-track); }
+.zimu-speed-slider::-moz-range-track { height: 0.25em; border-radius: 0.125em; background: var(--zimu-track); }
+.zimu-speed-slider::-webkit-slider-thumb {
+  width: 0.95em;
+  height: 0.95em;
+  margin-top: -0.35em; /* centres it on the track */
+  border: 0;
+  border-radius: 50%;
+  background: var(--zimu-tone2);
+  -webkit-appearance: none;
+}
+.zimu-speed-slider::-moz-range-thumb {
+  width: 0.95em;
+  height: 0.95em;
+  border: 0;
+  border-radius: 50%;
+  background: var(--zimu-tone2);
+}
+.zimu-speed-slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 0.2em rgba(95, 208, 104, 0.35); }
+.zimu-speed-slider:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 0.2em rgba(95, 208, 104, 0.35); }
+
+/* the Zimu on/off switch */
 .zimu-osd-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.45em;
-  margin: 0 0.4em;
+  margin: 0;
   padding: 4px 6px;
   font: 600 1em/1 system-ui, -apple-system, sans-serif;
   color: inherit;
@@ -139,7 +157,7 @@ html.zimu-hide-native video::cue {
   background: #fff;
   transition: transform 0.15s;
 }
-.zimu-osd-toggle.zimu-on .zimu-switch-track { background: #2f7d5b; }
+.zimu-osd-toggle.zimu-on .zimu-switch-track { background: var(--zimu-tone2); }
 .zimu-osd-toggle.zimu-on .zimu-switch-knob { transform: translateX(0.9em); }
 
 /* the subtitle block */
@@ -196,7 +214,7 @@ html.zimu-hide-native video::cue {
 
 /* tone colours: 1 blue, 2 green, 3 orange, 4 red, neutral grey */
 .zimu-tones .zimu-t1 { color: #5aa9ff; }
-.zimu-tones .zimu-t2 { color: #5fd068; }
+.zimu-tones .zimu-t2 { color: var(--zimu-tone2); }
 .zimu-tones .zimu-t3 { color: #ff9a2e; }
 .zimu-tones .zimu-t4 { color: #ff5c5c; }
 .zimu-tones .zimu-t5 { color: #c8c8c8; }

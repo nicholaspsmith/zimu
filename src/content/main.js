@@ -43,7 +43,6 @@
     mt: new Map(), // zh text -> english | Promise
     dismissedKeys: new Set(), // explanations closed with × this session
     status: '',
-    statusTimer: 0,
     syncing: false,
     lastSync: 0,
   };
@@ -75,7 +74,7 @@
       S.dictLoading = fetch(chrome.runtime.getURL('data/cedict.u8'))
         .then((r) => r.text())
         .then((t) => { S.dict = new Z.Dict(t); S.lineCache.clear(); render(true); })
-        .catch((e) => { console.error('[zimu] dictionary failed', e); setStatus('Dictionary failed to load', 0); });
+        .catch((e) => { console.error('[zimu] dictionary failed', e); flash('Dictionary failed to load'); });
     }
     return S.dictLoading;
   }
@@ -141,44 +140,19 @@
   // ---- overlay DOM ---------------------------------------------------------
 
   const root = h('div', { id: 'zimu-root', class: 'zimu-hidden' });
-  const toolbar = h('div', { class: 'zimu-toolbar' });
   const lines = h('div', { class: 'zimu-lines' });
   const zhBox = h('div', { class: 'zimu-zh' });
   const enBox = h('div', { class: 'zimu-en' });
-  const statusEl = h('span', { class: 'zimu-status' });
   let popup = null;
   let panel = null;
 
   lines.append(zhBox, enBox);
-  root.append(lines, toolbar);
-
-  function button(label, title, onclick) {
-    return h('button', { class: 'zimu-btn', title, onclick: (e) => { e.stopPropagation(); onclick(e); } }, label);
-  }
-
-  const autoBtn = button('Auto-pause', 'Pause at the end of each line (Q)', () => toggleAutoPause());
-  const playBtn = button('▶', 'Play / pause (space)', () => {
-    const v = S.video;
-    if (!v) return;
-    if (v.paused) v.play().catch(() => {}); else v.pause();
-  });
-  playBtn.classList.add('zimu-play');
-  const paintPlay = () => {
-    const playing = !!S.video && !S.video.paused;
-    playBtn.textContent = playing ? '⏸' : '▶';
-  };
-  toolbar.append(
-    button('⏮', 'Previous line (A)', () => gotoLine('prev')),
-    playBtn,
-    button('⏭', 'Next line (D)', () => gotoLine('next')),
-    autoBtn,
-    statusEl,
-  );
+  root.append(lines);
 
   // ---- controls in Jellyfin's own bottom bar ---------------------------------
-  // Speed (type a % or step it), settings and flashcards sit among Jellyfin's
-  // buttons, before its own ⚙. Jellyfin re-creates that bar with the player,
-  // so mountOsd() re-inserts the group whenever it's missing.
+  // All of Zimu's controls (switch, line stepping, auto-pause, speed, settings,
+  // flashcards) are a row under Jellyfin's buttons. Jellyfin re-creates that
+  // bar with the player, so mountOsd() re-inserts the row whenever it's missing.
 
   function osdButton(icon, fallback, title, onclick) {
     const b = h('button', {
@@ -187,47 +161,42 @@
       class: 'paper-icon-button-light autoSize zimu-osd-btn',
       title,
       'aria-label': title,
-      onclick: (e) => { e.stopPropagation(); onclick(e, b); },
+      onclick: (e) => {
+        e.stopPropagation();
+        onclick(e, b);
+        if (e.detail) b.blur(); // after a mouse click, Space belongs to Jellyfin again
+      },
     }, h('span', { class: `largePaperIconButton material-icons ${icon}`, 'aria-hidden': 'true', 'data-fallback': fallback }));
     return b;
   }
 
-  const speedInput = h('input', {
-    class: 'zimu-speed-input',
-    type: 'text',
-    inputmode: 'numeric',
-    maxlength: '3',
+  const SPEED_MIN = 40;
+  const SPEED_MAX = 110;
+  const clampSpeed = (n) => Math.max(SPEED_MIN, Math.min(SPEED_MAX, Math.round(n)));
+  const speedSlider = h('input', {
+    class: 'zimu-speed-slider',
+    type: 'range',
+    min: String(SPEED_MIN),
+    max: String(SPEED_MAX),
+    step: '1',
     value: '100',
-    title: 'Playback speed, 60–100% (type a number, ↑/↓ to step)',
+    title: `Playback speed, ${SPEED_MIN}–${SPEED_MAX}%`,
     'aria-label': 'Playback speed percent',
   });
-  const speedBox = h('label', { class: 'zimu-speed-box' }, speedInput, '%');
-  const commitSpeed = () => {
-    const n = parseInt(speedInput.value, 10);
-    if (Number.isFinite(n)) setSpeed(n); else paintSpeed(S.settings.speed);
-  };
-  speedInput.addEventListener('focus', () => speedInput.select());
-  speedInput.addEventListener('input', () => { speedInput.value = speedInput.value.replace(/\D/g, '').slice(0, 3); });
-  speedInput.addEventListener('blur', commitSpeed);
-  speedInput.addEventListener('keydown', (e) => {
-    e.stopPropagation(); // Jellyfin's player treats digits as "seek to N0%"
-    if (e.key === 'Enter') { e.preventDefault(); speedInput.blur(); }
-    else if (e.key === 'Escape') {
-      e.preventDefault();
-      speedInput.value = String(clampSpeed(S.settings.speed)); // so the blur commit is a no-op
-      speedInput.blur();
-    }
-    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      const step = (e.shiftKey ? 5 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
-      setSpeed((parseInt(speedInput.value, 10) || S.settings.speed) + step);
-      speedInput.select();
-    }
+  const speedReadout = h('span', { class: 'zimu-speed-readout' }, '100%');
+  const speedBox = h('div', { class: 'zimu-speed-box' }, speedSlider, speedReadout);
+  speedSlider.addEventListener('input', () => setSpeed(Number(speedSlider.value)));
+  // After a drag the keyboard goes back to Zimu's keys and Jellyfin's.
+  speedSlider.addEventListener('pointerdown', (e) => speedSlider.setPointerCapture?.(e.pointerId));
+  speedSlider.addEventListener('pointerup', () => speedSlider.blur());
+  speedSlider.addEventListener('keydown', (e) => {
+    e.stopPropagation(); // Jellyfin's player seeks on arrows and digits
+    if (e.key === 'Escape' || e.key === 'Enter') speedSlider.blur();
   });
 
   // Press-and-hold: one step at once, then after HOLD_DELAY it repeats,
   // starting every HOLD_START ms and speeding up by HOLD_ACCEL per step down
-  // to HOLD_FASTEST (60→100% takes ~2 s of holding).
+  // to HOLD_FASTEST.
   const HOLD_DELAY = 400;
   const HOLD_START = 160;
   const HOLD_ACCEL = 0.85;
@@ -283,18 +252,26 @@
     zimuSwitch.setAttribute('aria-label', title);
   }
 
+  const autoBtn = osdButton('pause_circle_outline', 'pause_circle_outline', 'Pause at the end of each line (Q)', () => toggleAutoPause());
+
   const osdGroup = h('div', { class: 'zimu-osd' },
     zimuSwitch,
-    slowerBtn,
-    speedBox,
-    fasterBtn,
-    settingsBtn,
-    osdButton('style', 'style', 'Zimu flashcards', () => send({ type: 'openCards' })));
+    h('div', { class: 'zimu-osd-centre' },
+      osdButton('chevron_left', 'chevron_left', 'Previous line (A)', () => gotoLine('prev')),
+      autoBtn,
+      osdButton('chevron_right', 'chevron_right', 'Next line (D)', () => gotoLine('next')),
+      slowerBtn,
+      speedBox,
+      fasterBtn),
+    h('div', { class: 'zimu-osd-end' },
+      osdButton('style', 'style', 'Zimu flashcards', () => send({ type: 'openCards' })),
+      settingsBtn));
 
   function paintSpeed(speed) {
     const n = clampSpeed(speed);
-    if (document.activeElement !== speedInput) speedInput.value = String(n);
-    speedBox.classList.toggle('zimu-on', n !== 100);
+    speedSlider.value = String(n);
+    speedSlider.style.setProperty('--zimu-fill', `${((n - SPEED_MIN) / (SPEED_MAX - SPEED_MIN)) * 100}%`);
+    speedReadout.textContent = `${n}%`;
   }
 
   // Jellyfin keeps recently visited pages in the document, hidden with
@@ -315,9 +292,8 @@
 
   function mountOsd() {
     const bar = activeOsdBar();
-    if (!bar || osdGroup.parentElement === bar) return;
-    const before = bar.querySelector(':scope > .btnVideoOsdSettings');
-    bar.insertBefore(osdGroup, before || null);
+    if (!bar || osdGroup.previousElementSibling === bar) return;
+    bar.after(osdGroup);
     // Jellyfin draws icons from CSS classes; fall back to the font's ligature
     // names if a class has no glyph.
     osdGroup.querySelectorAll('[data-fallback]').forEach((span) => {
@@ -326,12 +302,19 @@
     });
   }
 
-  function setStatus(text, ms = 6000) {
+  // Why Zimu has nothing to show; the disabled switch's tooltip.
+  function setStatus(text) {
     S.status = text;
-    statusEl.textContent = text;
-    clearTimeout(S.statusTimer);
-    if (ms) S.statusTimer = setTimeout(() => { statusEl.textContent = ''; }, ms);
-    paintSwitch(); // with no lines to show, the switch's tooltip says why
+    paintSwitch();
+  }
+
+  // Jellyfin's control bar, while it's on screen.
+  function shownOsd() {
+    const bar = activeOsdBar();
+    const osd = bar && bar.closest('.videoOsdBottom');
+    const shown = osd && !osd.classList.contains('videoOsdBottom-hidden') && osd.getBoundingClientRect().height > 0 &&
+      getComputedStyle(osd).opacity !== '0';
+    return shown ? osd : null;
   }
 
   // Off for this show: no overlay, no auto-pause or speed, Jellyfin's own
@@ -351,11 +334,11 @@
     if (off) { closePopup(); closeExplain(); }
     applySettings();
     if (panel) { togglePanel(false); togglePanel(true); }
-    setStatus(off ? '' : 'Zimu on', 2000);
     if (off) flash('Zimu off for this show · Z turns it back on');
+    else hint('Zimu on');
   }
 
-  // A short notice while the overlay itself is hidden.
+  // A short notice over the video.
   let flashEl = null;
   let flashTimer = 0;
   function flash(text) {
@@ -364,6 +347,10 @@
     document.body.append(flashEl);
     clearTimeout(flashTimer);
     flashTimer = setTimeout(() => flashEl.remove(), 2500);
+  }
+  // For results Jellyfin's bar already shows, such as the speed.
+  function hint(text) {
+    if (!shownOsd()) flash(text);
   }
 
   function applySettings() {
@@ -531,8 +518,6 @@
     seek(a);
   }
 
-  const clampSpeed = (n) => Math.max(60, Math.min(100, Math.round(n)));
-
   function applySpeed() {
     const v = S.video;
     if (!v) return;
@@ -563,7 +548,7 @@
     setLocal('speed', speed);
     applySpeed();
     paintSpeed(speed);
-    setStatus(`Speed ${speed}%`, 1500);
+    hint(`Speed ${speed}%`);
   }
 
   function gotoLine(which) {
@@ -585,7 +570,7 @@
 
   function toggleAutoPause() {
     Z.Settings.set({ autoPause: !S.settings.autoPause });
-    setStatus(!S.settings.autoPause ? 'Auto-pause on' : 'Auto-pause off', 2000);
+    hint(!S.settings.autoPause ? 'Auto-pause on' : 'Auto-pause off');
   }
 
   // Pausing on behalf of a hover or an open popup; resume only if we paused.
@@ -1032,7 +1017,7 @@
 
   document.addEventListener('mousedown', (e) => {
     if (popup && !popup.contains(e.target)) closePopup();
-    if (panel && !panel.contains(e.target) && !toolbar.contains(e.target) && !osdGroup.contains(e.target)) togglePanel(false);
+    if (panel && !panel.contains(e.target) && !osdGroup.contains(e.target)) togglePanel(false);
   }, true);
 
   // ---- settings panel ------------------------------------------------------
@@ -1055,16 +1040,20 @@
       setOff(false);
       if (Number(v) !== S.zhTrack) chooseTracks(Number(v), 'auto');
     } },
+    !off && zhOpts.length && S.zhTrack == null && h('option', { selected: true, disabled: true }, 'No Chinese text track'),
     zhOpts.length ? h('option', { value: 'off', selected: off }, 'Off for this show (Z)') : h('option', null, 'No text subtitles'),
     zhOpts.map((s) => h('option', { value: s.index, selected: !off && s.index === S.zhTrack }, s.title)));
-    const enSel = h('select', { onchange: (e) => {
+    // English comes on top of Chinese lines, so with none there's nothing to choose
+    const enSel = h('select', { disabled: !S.zh.length, onchange: (e) => {
       const v = e.target.value;
       chooseTracks(S.zhTrack, /^\d+$/.test(v) ? Number(v) : v);
     } },
-    h('option', { value: 'embedded', selected: S.enMode === 'embedded' }, 'From the Chinese track (bilingual)'),
-    h('option', { value: 'mt', selected: S.enMode === 'mt' }, 'Machine translation'),
-    h('option', { value: 'none', selected: S.enMode === 'none' }, 'None'),
-    zhOpts.map((s) => h('option', { value: s.index, selected: s.index === S.enMode }, s.title)));
+    S.zh.length ? [
+      hasEmbeddedEnglish() && h('option', { value: 'embedded', selected: S.enMode === 'embedded' }, 'From the Chinese track (bilingual)'),
+      h('option', { value: 'mt', selected: S.enMode === 'mt' }, 'Machine translation'),
+      h('option', { value: 'none', selected: S.enMode === 'none' }, 'None'),
+      ...zhOpts.map((s) => h('option', { value: s.index, selected: s.index === S.enMode }, s.title)),
+    ] : h('option', null, 'Pick a Chinese track first'));
     const range = (key, label, min, max, unit = '') => {
       const text = h('span', null, `${label} ${st[key]}${unit}`);
       return h('label', { class: 'zimu-range' }, text,
@@ -1093,7 +1082,7 @@
       range('textOpacity', 'Text', 30, 100, '%'),
       range('bgOpacity', 'Background', 0, 100, '%'),
       range('fontSize', 'Size', 18, 64, 'px'),
-      range('bottom', 'Height', 2, 60, '%'),
+      range('bottom', 'Height', 0, 60, '%'),
       h('div', { class: 'zimu-muted' }, 'Keys: Z on/off · A previous · S repeat · D next · Q auto-pause · [ ] speed ±1% ({ } ±5%) · Esc close'));
     root.append(panel);
     const a = S.panelAnchor;
@@ -1123,14 +1112,14 @@
         if (!S.video) return;
         await new Promise((r) => setTimeout(r, 1000));
       }
-      if (reason === 'start') setStatus('Zimu couldn’t find what Jellyfin is playing', 0);
+      if (reason === 'start') setStatus('Zimu couldn’t find what Jellyfin is playing');
     } finally {
       S.syncing = false;
     }
   }
 
   async function loadItem(itemId, mediaSourceId) {
-    setStatus('Zimu: finding subtitles…', 0);
+    setStatus('Zimu: finding subtitles…');
     closeExplain();
     S.itemId = itemId;
     S.zh = [];
@@ -1144,7 +1133,7 @@
     try {
       S.item = await J.item(itemId);
     } catch (e) {
-      setStatus(`Zimu: ${e.message || e}`, 0);
+      setStatus(`Zimu: ${e.message || e}`);
       return;
     }
     S.title = J.itemTitle(S.item);
@@ -1154,23 +1143,27 @@
     S.subs = subs;
     const { zh, en } = J.pickTracks(subs.slice());
     if (!zh) {
-      setStatus(subs.length ? 'No Chinese subtitle track on this video (⚙ to pick one)' : 'This video has no subtitles', 0);
+      setStatus(subs.length ? 'No Chinese subtitle track on this video (⚙ to pick one)' : 'This video has no subtitles');
       applySettings();
       return;
     }
     if (!zh.text) {
-      setStatus('The Chinese subtitles are images (PGS/VobSub); Zimu needs text (SRT/ASS)', 0);
+      setStatus('The Chinese subtitles are images (PGS/VobSub); Zimu needs text (SRT/ASS)');
       applySettings();
       return;
     }
     await chooseTracks(zh.index, en ? en.index : 'auto');
   }
 
+  // Whether the Chinese track in use carries its own English line under each
+  // Chinese one.
+  const hasEmbeddedEnglish = () => S.zh.filter((c) => c.en).length > S.zh.length * 0.3;
+
   async function chooseTracks(zhIndex, enMode) {
     if (!S.itemId) return;
     const itemId = S.itemId;
     try {
-      setStatus('Loading subtitles…', 0);
+      setStatus('Loading subtitles…');
       const zh = await J.subtitleCues(itemId, S.mediaSourceId, zhIndex);
       if (itemId !== S.itemId) return;
       for (const cue of zh) {
@@ -1180,21 +1173,22 @@
       }
       S.zh = zh.filter((c) => c.zhText);
       S.zhTrack = zhIndex;
-      const embedded = S.zh.filter((c) => c.en).length > S.zh.length * 0.3;
       if (enMode === 'auto') {
         const enTrack = J.pickTracks(S.subs.slice()).en;
-        enMode = embedded ? 'embedded' : enTrack ? enTrack.index : S.settings.machineTranslate ? 'mt' : 'none';
+        enMode = hasEmbeddedEnglish() ? 'embedded' : enTrack ? enTrack.index : S.settings.machineTranslate ? 'mt' : 'none';
       }
       S.en = typeof enMode === 'number' ? await J.subtitleCues(itemId, S.mediaSourceId, enMode) : [];
       S.enMode = enMode;
-      if (isOff()) setStatus('', 0);
-      else setStatus(S.zh.length ? `${S.zh.length} lines · ${S.title}` : 'That track has no Chinese text', 4000);
+      setStatus(S.zh.length ? '' : 'That track has no Chinese text');
+      if (S.status && !isOff()) flash(S.status);
       loadDict();
       applySettings();
+      if (panel) { togglePanel(false); togglePanel(true); } // its menus follow the tracks
       if (S.pendingClip && S.pendingClip.itemId === itemId) startPendingClip();
     } catch (e) {
       console.error('[zimu]', e);
-      setStatus(`Subtitles failed: ${e.message || e}`, 0);
+      setStatus(`Subtitles failed: ${e.message || e}`);
+      flash(S.status);
     }
   }
 
@@ -1228,7 +1222,7 @@
         await new Promise((r) => setTimeout(r, 1000));
       }
     }
-    setStatus('Couldn’t start playback for that card');
+    flash('Couldn’t start playback for that card');
     return false;
   }
 
@@ -1254,7 +1248,6 @@
 
   const videoEvents = {
     play: () => {
-      paintPlay();
       // someone pressed play while we were holding: stop holding
       if (S.holds.size) { S.holds.clear(); S.weePaused = false; }
       kick();
@@ -1274,7 +1267,7 @@
       kick();
     },
     seeked: () => kick(),
-    pause: () => { paintPlay(); kick(); },
+    pause: () => kick(),
   };
 
   function attach(video) {
@@ -1288,7 +1281,6 @@
     syncNowPlaying('start');
     applySettings();
     kick(); // the video may already be playing, so no 'play' event will come
-    paintPlay();
     mountOsd();
   }
 
@@ -1331,11 +1323,15 @@
     const v = findVideo();
     if (v && J.credentials()) attach(v); else if (!v) detach();
     if (S.video) {
-      // lift the subtitles above Jellyfin's control bar while it shows
-      const osd = document.querySelector('.videoOsdBottom');
-      const visible = osd && !osd.classList.contains('videoOsdBottom-hidden') && osd.getBoundingClientRect().height > 0 &&
-        getComputedStyle(osd).opacity !== '0';
-      root.style.setProperty('--zimu-lift', visible ? `${Math.round(osd.getBoundingClientRect().height)}px` : '0px');
+      // The subtitles stay at one height, clear of Jellyfin's controls whether
+      // they show or not. offsetHeight ignores the bar's slide in and out, and
+      // is 0 once Jellyfin takes the bar out of the layout, so the last size stays.
+      const bar = activeOsdBar();
+      const controls = bar && bar.closest('.osdControls');
+      if (controls && controls.offsetHeight) {
+        const pad = parseFloat(getComputedStyle(controls.closest('.videoOsdBottom')).paddingBottom) || 0;
+        root.style.setProperty('--zimu-bar', `${controls.offsetHeight + Math.round(pad)}px`);
+      }
       mountOsd();
       if (!S.video.paused) kick(); // keeps the loop alive if a frame was missed
       if (!S.video.paused && Date.now() - S.lastSync > 15000) syncNowPlaying('poll');

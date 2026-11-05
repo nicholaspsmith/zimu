@@ -6,3 +6,4 @@ src/data/
 src/vendor/
 .DS_Store
 src/background.js
+docs/screenshots/*.mp4

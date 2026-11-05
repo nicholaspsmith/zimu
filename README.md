@@ -4,6 +4,38 @@ Mandarin learning subtitles for the **Jellyfin web player**, in the spirit of
 Language Learning with Netflix. A browser extension for Chrome, Brave and
 Zen/Firefox.
 
+## Screenshots
+
+<table>
+<tr>
+<td><img src="docs/screenshots/1-line.png" alt="Hanzi, pinyin and English over the video, with Zimu's controls under Jellyfin's" width="420"></td>
+<td><img src="docs/screenshots/2-word-popup.png" alt="Clicking a word: CC-CEDICT definitions, a character breakdown, Save to flashcards" width="420"></td>
+</tr>
+<tr>
+<td align="center">Hanzi, pinyin and English, with Zimu's row under Jellyfin's controls</td>
+<td align="center">Click a word for its definitions and a character breakdown</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/3-phrase-popup.png" alt="Dragging across words: a phrase translation and word-by-word breakdown" width="420"></td>
+<td><img src="docs/screenshots/6-explain.png" alt="Claude explains the line: literal gloss, meaning and notes" width="420"></td>
+</tr>
+<tr>
+<td align="center">Drag across words to translate a phrase</td>
+<td align="center">Click the line and Claude explains it</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/5-card.png" alt="A flashcard with its sentence and a Play link back to the moment" width="420"></td>
+<td><img src="docs/screenshots/9-sentence-review.png" alt="Reviewing a saved sentence with its pinyin, subtitle and explanation" width="420"></td>
+</tr>
+<tr>
+<td align="center">Flashcards keep the sentence and the exact moment</td>
+<td align="center">Sentence review</td>
+</tr>
+</table>
+
+Taken by `npm run screenshots` against the fake Jellyfin the end-to-end tests
+use, so the video behind the subtitles is a gradient rather than a show.
+
 - **Hanzi, pinyin with tone marks and English**, each switchable on its own
   (hanzi + pinyin, English + pinyin, pinyin only, …). Pinyin is
   context-aware (还 hái/huán, 睡着 shuìzháo, 哪儿 nǎr).
@@ -47,26 +79,27 @@ Zen/Firefox.
   review, and **▶ Play** jumps your Jellyfin tab to that line and stops at
   its end so you can hear it again. Export to Anki (each row carries a link
   that plays the moment) or back up/restore as JSON.
-- **Off for this show**: flip the **Zimu** switch at the start of Zimu's
-  controls in Jellyfin's bar, press **Z**, or pick *Off for this show* in
+- **Off for this show**: flip the **Zimu** switch in Zimu's controls under
+  Jellyfin's, press **Z**, or pick *Off for this show* in
   ⚙'s Chinese menu, when you're watching something you don't need Zimu for. Its
   subtitles, auto-pause and speed go away (playback returns to 100%) and
   Jellyfin's own subtitles come back, so set those to Off in Jellyfin's menu
   if you want none. Zimu remembers it for the whole series (or the film);
   **Z** again, or picking a Chinese track, turns it back on.
 - **No subtitles to show**: on a video with no subtitles Zimu leaves only its
-  switch, disabled, in Jellyfin's bar (hover it for the reason), and playback
+  switch, disabled, under Jellyfin's controls (hover it for the reason), and playback
   stays at 100%. If the video has text tracks but none is marked Chinese, the
-  settings button stays too, so you can pick one by hand.
-- **Under the subtitles** (on hover): ⏮ previous line, ▶/⏸ play/pause,
-  ⏭ next line, Auto-pause. Keys like LLN: **A** previous, **S** repeat,
+  settings button stays too, so you can pick one by hand; the English menu
+  waits until a track with Chinese text is chosen.
+- **In a row under Jellyfin's controls**: the Zimu switch on the left,
+  previous line, Auto-pause, next line and speed in the centre, flashcards
+  and settings on the right, under fullscreen. Subtitles stay at one height,
+  just above those controls, whether the bar is showing or not (⚙ → Height
+  raises them). Keys like LLN: **A** previous, **S** repeat,
   **D** next, **Q** auto-pause.
-- **In Jellyfin's bottom bar**, before its own ⚙: speed, Zimu settings
-  (tune icon) and flashcards (cards icon).
-- **Speed** from 60% to 100% in 1% steps: type a percentage into the box
-  (Enter applies, Esc cancels, ↑/↓ step), click − / +, or hold them to run
-  through the range (it speeds up the longer you hold), or use **[ ]** (1%)
-  and **{ }** (5%). Pitch is kept, so voices sound natural, just slower.
+- **Speed** from 40% to 110% in 1% steps: drag the slider between − and +,
+  click − / +, or hold them to run through the range (it speeds up the longer
+  you hold), or use **[ ]** (1%) and **{ }** (5%). Pitch is kept, so voices sound natural, just slower.
 - **Colour by tone** (⚙): 1 blue, 2 green, 3 orange, 4 red, neutral grey.
 - **Look** (⚙): text and background opacity, size and height.
 - Hovering the subtitles doesn't pause (turn "Pause while the mouse is over
@@ -93,7 +126,7 @@ npm run build      # fetches CC-CEDICT, vendors pinyin-pro,
 **Chrome / Brave:** `chrome://extensions` → Developer mode → Load unpacked →
 pick `~/Code/zimu/src`.
 
-**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.9.1.xpi` onto
+**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.12.4.xpi` onto
 the browser (unsigned add-ons need `xpinstall.signatures.required = false`
 in `about:config`), or load `src/manifest.json` temporarily from
 `about:debugging` → This Firefox.

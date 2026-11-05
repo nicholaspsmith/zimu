@@ -32,7 +32,8 @@ const otherItems = {
 const events = (rows) => ({ TrackEvents: rows.map(([s, e, t], i) => ({ Id: String(i), StartPositionTicks: s * 1e7, EndPositionTicks: e * 1e7, Text: t })) });
 
 const page = (autoplay) => `<!doctype html><html><head><meta charset="utf-8"><title>Jellyfin</title>
-<style>body{margin:0;background:#111} video{width:100vw;height:100vh;object-fit:contain}</style></head><body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<style>body{margin:0;background:#111} video{width:100vw;height:100vh;object-fit:contain} .btnPause,.btnVideoOsdSettings,.btnFullscreen{background:none;border:0;color:#fff;font:inherit;padding:6px;cursor:pointer}</style></head><body>
 <div class="videoPlayerContainer"><video class="htmlvideoplayer" src="/media/test.mp4" ${autoplay ? 'autoplay' : ''} playsinline></video></div>
 <!-- Jellyfin keeps earlier pages in the document, hidden; an older player page comes first -->
 <div class="mainAnimatedPage hide" style="display:none"><div class="videoOsdBottom videoOsdBottom-maincontrols">
@@ -40,10 +41,10 @@ const page = (autoplay) => `<!doctype html><html><head><meta charset="utf-8"><ti
 </div></div>
 <div class="videoOsdBottom videoOsdBottom-maincontrols videoOsdBottom-hidden" style="position:fixed;left:0;right:0;bottom:0;padding:90px 8px 8px;pointer-events:none;background:linear-gradient(transparent,rgba(0,0,0,.6));color:#fff;font:16px system-ui">
   <div class="osdControls" style="pointer-events:auto"><div class="buttons focuscontainer-x" style="display:flex;align-items:center;gap:6px">
-    <div dir="ltr"><button class="btnPause">pause</button></div>
+    <div dir="ltr"><button class="btnPause"><span class="material-icons">pause</span></button></div>
     <div class="osdTimeText" style="margin-right:auto"><span class="endsAtText"></span></div>
-    <button class="btnVideoOsdSettings" title="Settings">settings</button>
-    <button class="btnFullscreen">fullscreen</button>
+    <button class="btnVideoOsdSettings" title="Settings"><span class="material-icons">settings</span></button>
+    <button class="btnFullscreen"><span class="material-icons">fullscreen</span></button>
   </div></div>
 </div>
 <script>

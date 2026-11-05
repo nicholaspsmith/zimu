@@ -31,9 +31,15 @@ async function waitFor(fn, ms = 8000, step = 100) {
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
-  const video = path.join(OUT, 'test.mp4');
+  // E2E_VIDEO=scene swaps the SMPTE test pattern for a slow dark gradient,
+  // so the screenshots look like a player (npm run screenshots)
+  const scene = process.env.E2E_VIDEO === 'scene';
+  const video = path.join(OUT, scene ? 'scene.mp4' : 'test.mp4');
   if (!fs.existsSync(video)) {
-    execFileSync('ffmpeg', ['-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=25', '-f', 'lavfi', '-i', 'sine=frequency=440',
+    const source = scene
+      ? 'gradients=size=1280x720:rate=25:c0=0x0b1a2b:c1=0x24344d:c2=0x3b2a4a:c3=0x0f3b45:nb_colors=4:speed=0.01'
+      : 'testsrc2=size=1280x720:rate=25';
+    execFileSync('ffmpeg', ['-loglevel', 'error', '-f', 'lavfi', '-i', source, '-f', 'lavfi', '-i', 'sine=frequency=440',
       '-t', '20', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags', '+faststart', video]);
   }
   const { server, state } = await start(PORT, video);

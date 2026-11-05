@@ -9,7 +9,8 @@
     "build": "node scripts/build.js",
     "test": "node --test test/*.test.js",
     "package": "node scripts/build.js && node scripts/package.js",
-    "e2e": "node test/e2e/run.js"
+    "e2e": "node test/e2e/run.js",
+    "screenshots": "E2E_OUT=docs/screenshots E2E_VIDEO=scene node test/e2e/run.js"
   },
   "author": "",
   "license": "MIT",

@@ -4,6 +4,38 @@ Mandarin learning subtitles for the **Jellyfin web player**, in the spirit of
 Language Learning with Netflix. A browser extension for Chrome, Brave and
 Zen/Firefox.
 
+## Screenshots
+
+<table>
+<tr>
+<td><img src="docs/screenshots/1-line.png" alt="Hanzi, pinyin and English over the video, with Zimu's controls under Jellyfin's" width="420"></td>
+<td><img src="docs/screenshots/2-word-popup.png" alt="Clicking a word: CC-CEDICT definitions, a character breakdown, Save to flashcards" width="420"></td>
+</tr>
+<tr>
+<td align="center">Hanzi, pinyin and English, with Zimu's row under Jellyfin's controls</td>
+<td align="center">Click a word for its definitions and a character breakdown</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/3-phrase-popup.png" alt="Dragging across words: a phrase translation and word-by-word breakdown" width="420"></td>
+<td><img src="docs/screenshots/6-explain.png" alt="Claude explains the line: literal gloss, meaning and notes" width="420"></td>
+</tr>
+<tr>
+<td align="center">Drag across words to translate a phrase</td>
+<td align="center">Click the line and Claude explains it</td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/5-card.png" alt="A flashcard with its sentence and a Play link back to the moment" width="420"></td>
+<td><img src="docs/screenshots/9-sentence-review.png" alt="Reviewing a saved sentence with its pinyin, subtitle and explanation" width="420"></td>
+</tr>
+<tr>
+<td align="center">Flashcards keep the sentence and the exact moment</td>
+<td align="center">Sentence review</td>
+</tr>
+</table>
+
+Taken by `npm run screenshots` against the fake Jellyfin the end-to-end tests
+use, so the video behind the subtitles is a gradient rather than a show.
+
 - **Hanzi, pinyin with tone marks and English**, each switchable on its own
   (hanzi + pinyin, English + pinyin, pinyin only, …). Pinyin is
   context-aware (还 hái/huán, 睡着 shuìzháo, 哪儿 nǎr).
@@ -94,7 +126,7 @@ npm run build      # fetches CC-CEDICT, vendors pinyin-pro,
 **Chrome / Brave:** `chrome://extensions` → Developer mode → Load unpacked →
 pick `~/Code/zimu/src`.
 
-**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.9.1.xpi` onto
+**Zen / Firefox:** `npm run package`, then drag `dist/zimu-0.12.4.xpi` onto
 the browser (unsigned add-ons need `xpinstall.signatures.required = false`
 in `about:config`), or load `src/manifest.json` temporarily from
 `about:debugging` → This Firefox.

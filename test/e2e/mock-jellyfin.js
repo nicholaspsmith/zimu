@@ -54,6 +54,7 @@ const v = document.querySelector('video');
 document.addEventListener('keydown', (e) => { if (/^[0-9]$/.test(e.key)) v.currentTime = v.duration * Number(e.key) / 10; });
 const report = () => fetch('/mock/state', {method:'POST', body: JSON.stringify({playing: v.currentTime > 0 || !v.paused})});
 v.addEventListener('playing', report);
+if (!v.paused) report(); // the icon font can hold this script back past the first 'playing'
 setInterval(async () => {
   const cmds = await (await fetch('/mock/commands')).json();
   for (const c of cmds) { v.currentTime = c.startPositionTicks / 1e7; v.play(); }

@@ -96,9 +96,9 @@ test('real CC-CEDICT: lookup and segmentation', () => {
   assert.deepEqual(seg, ['我', '觉得', '他', '还', '没', '睡着']);
 });
 
-test('manifest runs on every Jellyfin address in use', () => {
+test('manifest runs on a local Jellyfin', () => {
   const m = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'manifest.json'), 'utf8'));
-  const servers = ['https://jellyfin.example.com/web/', 'http://jellyfin-host:8096/web/'];
+  const servers = ['http://localhost:8096/web/', 'http://127.0.0.1:8096/web/'];
   const covers = (patterns, url) => patterns.some((p) => {
     const [, scheme, host] = /^(\*|https?):\/\/([^/]+)\//.exec(p);
     const u = new URL(url);

@@ -138,10 +138,16 @@ subtitles. ⚙ on the overlay changes tracks and display.
 
 ## Servers
 
-The extension runs on `https://jellyfin.example.com`, `http://jellyfin-host:*`, `http://192.0.2.10:*`,
-`localhost` and `127.0.0.1`. To use another address, add it to
-`host_permissions`, `content_scripts.matches` and
-`web_accessible_resources.matches` in `src/manifest.json` and reload.
+The extension runs on `localhost` and `127.0.0.1`. To use your own server,
+list it in `servers.local.json` at the top of the repo (git ignores it):
+
+```json
+["https://jellyfin.example.com/*", "http://192.0.2.10/*"]
+```
+
+`npm run package` adds those to the built manifest and writes the result to
+`dist/`. Load `dist/unpacked` in Chrome or Brave, or install the `.xpi` in
+Zen or Firefox.
 
 ## Limits
 

@@ -11,6 +11,7 @@
     showHanzi: true,
     showPinyin: true,
     showEnglish: true,
+    showGloss: false, // a short meaning under each word, pinyin-sized
     fontSize: 34, // px for hanzi
     textOpacity: 100, // % — subtitle text
     bgOpacity: 75, // % — the box behind the subtitles

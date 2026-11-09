@@ -128,3 +128,19 @@ test('estimating when a word is spoken inside a line', () => {
   const astral = Z.estimateSpan('𠮷我们', 1, 3, 0, 3);
   assert.ok(astral.start > 0.5 && astral.end <= 3);
 });
+
+test('short gloss picks one everyday sense and trims it', () => {
+  // first sense, parentheticals and classifiers dropped
+  assert.equal(Z.shortGloss(['coffee', 'CL:杯[bei1]']), 'coffee');
+  // synonyms inside one sense: keep the first
+  assert.equal(Z.shortGloss(['I; me; my']), 'I');
+  assert.equal(Z.shortGloss(['head', 'hair (or刻: head of hair)', 'top']), 'head');
+  assert.equal(Z.shortGloss(['to drink', 'My goodness!']), 'to drink');
+  // a long sense is cut at a word boundary with an ellipsis
+  assert.equal(Z.shortGloss(['an extremely long definition that goes on']), 'an extremely long…');
+  // senses that are only cross-references are skipped
+  assert.equal(Z.shortGloss(['variant of 你好[ni3 hao3]', 'hello']), 'hello');
+  // nothing usable → empty string
+  assert.equal(Z.shortGloss([]), '');
+  assert.equal(Z.shortGloss(['see 什么[shen2 me5]']), '');
+});

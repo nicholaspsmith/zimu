@@ -118,7 +118,7 @@ html.zimu-hide-native video::cue {
   .zimu-osd-btn.zimu-on .zimu-pause-mark { animation: none; }
 }
 
-.zimu-speed-box { display: inline-flex; align-items: center; font: 600 1em/1 system-ui, -apple-system, sans-serif; }
+.zimu-speed-box { display: inline-flex; align-items: center; font: 600 1em/1 system-ui, -apple-system, sans-serif; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
 .zimu-speed-readout { min-width: 3.3ch; text-align: right; font-variant-numeric: tabular-nums; }
 .zimu-speed-slider {
   --zimu-fill: 100%;
@@ -128,7 +128,7 @@ html.zimu-hide-native video::cue {
   margin: 0 0.5em 0 0.25em;
   padding: 0;
   background: none;
-  cursor: pointer;
+  pointer-events: none; /* the box runs the drag, see main.js */
   -webkit-appearance: none;
   appearance: none;
 }

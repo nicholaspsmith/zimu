@@ -187,24 +187,43 @@
     max: String(SPEED_MAX),
     step: '1',
     value: '100',
-    title: `Playback speed, ${SPEED_MIN}–${SPEED_MAX}%`,
     'aria-label': 'Playback speed percent',
   });
   const speedReadout = h('span', { class: 'zimu-speed-readout' }, '100%');
-  const speedBox = h('div', { class: 'zimu-speed-box' }, speedSlider, speedReadout);
-  speedSlider.addEventListener('input', () => setSpeed(Number(speedSlider.value)));
-  // The browser runs the drag itself; nothing may get in its way: no pointer
-  // capture of our own (it breaks Firefox's native drag), no writes to the
-  // slider's value while the thumb is held, and Jellyfin's bar never sees
-  // the pointer (it would treat the press as a tap on the controls).
+  const speedBox = h('div', { class: 'zimu-speed-box', title: `Playback speed, ${SPEED_MIN}–${SPEED_MAX}%` }, speedSlider, speedReadout);
+  speedSlider.addEventListener('input', () => setSpeed(Number(speedSlider.value))); // arrow keys
+  // The drag is Zimu's, not the browser's: the <input> takes no pointer
+  // events (the native range drag stalled in Firefox-based browsers inside
+  // Jellyfin's bar), the box maps the pointer's x to a value and holds the
+  // pointer until release. Jellyfin's bar never sees the press.
   let sliderHeld = false;
-  speedSlider.addEventListener('pointerdown', () => { sliderHeld = true; });
+  const THUMB_EM = 0.95; // the thumb's width in the CSS; its centre runs from left + half to right − half
+  function dragSpeedTo(x) {
+    const r = speedSlider.getBoundingClientRect();
+    const thumb = parseFloat(getComputedStyle(speedSlider).fontSize) * THUMB_EM;
+    const frac = Math.max(0, Math.min(1, (x - r.left - thumb / 2) / Math.max(1, r.width - thumb)));
+    const n = Math.round(SPEED_MIN + frac * (SPEED_MAX - SPEED_MIN));
+    if (n !== Number(speedSlider.value)) {
+      speedSlider.value = String(n);
+      setSpeed(n);
+    }
+  }
+  speedBox.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    const r = speedSlider.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right) return; // the readout
+    e.preventDefault();
+    sliderHeld = true;
+    speedBox.setPointerCapture?.(e.pointerId);
+    dragSpeedTo(e.clientX);
+  });
+  speedBox.addEventListener('pointermove', (e) => { if (sliderHeld) dragSpeedTo(e.clientX); });
   // After a drag the keyboard goes back to Zimu's keys and Jellyfin's.
-  const sliderReleased = () => { sliderHeld = false; speedSlider.blur(); };
-  for (const ev of ['pointerup', 'pointercancel']) speedSlider.addEventListener(ev, sliderReleased);
-  speedSlider.addEventListener('change', () => { if (sliderHeld) sliderReleased(); }); // not after an arrow key
-  document.addEventListener('pointerup', () => { if (sliderHeld) sliderReleased(); }, true);
-  for (const ev of ['pointerdown', 'mousedown', 'touchstart', 'click']) speedBox.addEventListener(ev, (e) => e.stopPropagation());
+  const sliderReleased = () => { if (!sliderHeld) return; sliderHeld = false; speedSlider.blur(); };
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) speedBox.addEventListener(ev, sliderReleased);
+  document.addEventListener('pointerup', sliderReleased, true);
+  for (const ev of ['mousedown', 'touchstart', 'click']) speedBox.addEventListener(ev, (e) => e.stopPropagation());
   speedSlider.addEventListener('keydown', (e) => {
     e.stopPropagation(); // Jellyfin's player seeks on arrows and digits
     if (e.key === 'Escape' || e.key === 'Enter') speedSlider.blur();
@@ -353,9 +372,16 @@
     return shown[shown.length - 1] || null;
   }
 
+  // While a pointer is held on the row (a drag, a held − / +) the row stays
+  // put: moving it in the DOM would end the gesture.
+  let osdHeld = false;
+  osdGroup.addEventListener('pointerdown', () => { osdHeld = true; });
+  document.addEventListener('pointerup', () => { osdHeld = false; }, true);
+  document.addEventListener('pointercancel', () => { osdHeld = false; }, true);
+
   function mountOsd() {
     const bar = activeOsdBar();
-    if (!bar || osdGroup.previousElementSibling === bar) return;
+    if (!bar || osdGroup.previousElementSibling === bar || osdHeld) return;
     bar.after(osdGroup);
     // Jellyfin draws icons from CSS classes; fall back to the font's ligature
     // names if a class has no glyph.

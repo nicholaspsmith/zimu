@@ -84,8 +84,21 @@ html.zimu-hide-native video::cue {
   color: var(--zimu-tone2);
   background-color: rgba(95, 208, 104, 0.2);
 }
-/* everything is green, so "on" shows as a backdrop */
-.zimu-osd .zimu-osd-btn.zimu-on { background-color: rgba(95, 208, 104, 0.3); }
+/* the cassette (auto-pause): a tape, and when it's on a pause sign cut
+   through the tape that blinks like a cursor */
+.zimu-cassette { display: inline-flex; align-items: center; justify-content: center; }
+.zimu-cassette svg { display: block; overflow: visible; }
+.zimu-cassette .zimu-cassette-gap, .zimu-cassette .zimu-pause-mark { display: none; }
+.zimu-osd-btn.zimu-on .zimu-cassette-gap { display: block; }
+.zimu-osd-btn.zimu-on .zimu-pause-mark { display: block; animation: zimu-blink 1.2s ease-in-out infinite; }
+@keyframes zimu-blink {
+  0%, 37.5% { opacity: 1; }
+  50%, 87.5% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zimu-osd-btn.zimu-on .zimu-pause-mark { animation: none; }
+}
 
 .zimu-speed-box { display: inline-flex; align-items: center; font: 600 1em/1 system-ui, -apple-system, sans-serif; }
 .zimu-speed-readout { min-width: 3.3ch; text-align: right; font-variant-numeric: tabular-nums; }

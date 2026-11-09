@@ -45,7 +45,8 @@ use, so the video behind the subtitles is a gradient rather than a show.
   empty row so the line keeps its shape. Off by default.
 - **Click a word** for its CC-CEDICT definitions, a character breakdown and
   a 🔊 pronunciation — and playback jumps to where that word is said and
-  carries on (with Auto-pause on, it stops at the end of the line as usual).
+  carries on (or stops at the end of the line, if the Zimu button has that
+  pending).
   ▶ Hear it in the popup plays just the word and stops. Subtitles only time
   whole lines, so the word's moment is estimated from its position in the
   line (Mandarin runs at about one syllable per character); a short lead-in
@@ -84,23 +85,28 @@ use, so the video behind the subtitles is a gradient rather than a show.
   its end so you can hear it again. Export to Anki (each row carries a link
   that plays the moment) or back up/restore as JSON.
 - **Off for this show**: flip the **Zimu** switch in Zimu's controls under
-  Jellyfin's, press **Z**, or pick *Off for this show* in
+  Jellyfin's, press **Shift+Z**, or pick *Off for this show* in
   ⚙'s Chinese menu, when you're watching something you don't need Zimu for. Its
-  subtitles, auto-pause and speed go away (playback returns to 100%) and
+  subtitles, pending stop and speed go away (playback returns to 100%) and
   Jellyfin's own subtitles come back, so set those to Off in Jellyfin's menu
   if you want none. Zimu remembers it for the whole series (or the film);
-  **Z** again, or picking a Chinese track, turns it back on.
+  **Shift+Z** again, or picking a Chinese track, turns it back on.
 - **No subtitles to show**: on a video with no subtitles Zimu leaves only its
   switch, disabled, under Jellyfin's controls (hover it for the reason), and playback
   stays at 100%. If the video has text tracks but none is marked Chinese, the
   settings button stays too, so you can pick one by hand; the English menu
   waits until a track with Chinese text is chosen.
 - **In a row under Jellyfin's controls**: the Zimu switch on the left,
-  previous line, Auto-pause, next line and speed in the centre, flashcards
+  previous line, the Zimu button, next line and speed in the centre, flashcards
   and settings on the right, under fullscreen. Subtitles stay at one height,
   just above those controls, whether the bar is showing or not (⚙ → Height
   raises them). Keys like LLN: **A** previous, **S** repeat,
-  **D** next, **Q** auto-pause.
+  **D** next, **Z** the Zimu button.
+- **The Zimu button** (the cassette, **Z**) is one shot, not a mode. While
+  playing, it stops at the end of the line on screen (in a silence, the end
+  of the next line); the pause sign through the tape blinks until then.
+  While paused, it plays the current line again from its start and stops at
+  its end. Jellyfin's own play button always carries on without stopping.
 - **Speed** from 40% to 110% in 1% steps: drag the slider between − and +,
   click − / +, or hold them to run through the range (it speeds up the longer
   you hold), or use **[ ]** (1%) and **{ }** (5%). Pitch is kept, so voices sound natural, just slower.

@@ -61,9 +61,9 @@ use, so the video behind the subtitles is a gradient rather than a show.
   Opening one pauses the video. The panel (right-hand side) stays while that
   line is on screen — through playback, word popups and mouse movement — and
   comes back whenever you return to the line. **Hide** (or Esc) tucks it
-  away; while that line is on screen a small *Show explanation* button
-  stands in its corner, and it or clicking the line brings the panel back
-  (from the save, no new charge).
+  away; while that line is on screen a green speech bubble appears in Zimu's
+  controls, left of the flashcards, and it or clicking the line brings the
+  panel back (from the save, no new charge).
   Scrolling it never changes Jellyfin's volume.
   Needs your Anthropic API key (🗂 → Settings); uses Claude Opus 5.5 at low
   effort, about 1¢ per new line, and each line is explained once.
@@ -104,11 +104,13 @@ use, so the video behind the subtitles is a gradient rather than a show.
   just above those controls, whether the bar is showing or not (⚙ → Height
   raises them). Keys like LLN: **A** previous, **S** repeat,
   **D** next, **Z** the Zimu button.
-- **The Zimu button** (the cassette, **Z**) is one shot, not a mode. While
-  playing, it stops at the end of the line on screen (in a silence, the end
-  of the next line); the pause sign through the tape blinks until then.
-  While paused, it plays the current line again from its start and stops at
-  its end. Jellyfin's own play button always carries on without stopping.
+- **The Zimu button** (the cassette, **Z**) is one shot, not a mode: playing
+  or paused, it plays the line on screen again from its start and stops at
+  its end; the pause sign through the tape blinks until then. In a silence
+  it takes the next line (while playing) or the one just finished (while
+  paused). Jellyfin's own play button always carries on without stopping.
+- **Green ticks on Jellyfin's seek bar** mark where this video's flashcards
+  were made; hover one for the word.
 - **Speed** from 40% to 100% in 1% steps: drag the slider between − and +,
   click − / +, or hold them to run through the range (it speeds up the longer
   you hold), or use **[ ]** (1%) and **{ }** (5%). Pitch is kept, so voices sound natural, just slower.

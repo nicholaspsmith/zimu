@@ -40,7 +40,7 @@ const page = (autoplay) => `<!doctype html><html><head><meta charset="utf-8"><ti
   <div class="osdControls"><div class="buttons focuscontainer-x"><button class="btnVideoOsdSettings">old settings</button></div></div>
 </div></div>
 <div class="videoOsdBottom videoOsdBottom-maincontrols videoOsdBottom-hidden" style="position:fixed;left:0;right:0;bottom:0;padding:90px 8px 8px;pointer-events:none;background:linear-gradient(transparent,rgba(0,0,0,.6));color:#fff;font:16px system-ui">
-  <div class="osdControls" style="pointer-events:auto"><div class="buttons focuscontainer-x" style="display:flex;align-items:center;gap:6px">
+  <div class="osdControls" style="pointer-events:auto"><div class="sliderContainer" style="position:relative;height:16px;margin:0 8px 6px"><input type="range" class="osdPositionSlider" min="0" max="100" value="0" style="width:100%;margin:0"></div><div class="buttons focuscontainer-x" style="display:flex;align-items:center;gap:6px">
     <div dir="ltr"><button class="btnPause"><span class="material-icons">pause</span></button></div>
     <div class="osdTimeText" style="margin-right:auto"><span class="endsAtText"></span></div>
     <button class="btnVideoOsdSettings" title="Settings"><span class="material-icons">settings</span></button>

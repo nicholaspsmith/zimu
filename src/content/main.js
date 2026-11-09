@@ -272,12 +272,16 @@
   function paintStop() {
     const armed = S.stopAt >= 0;
     autoBtn.classList.toggle('zimu-on', armed);
-    const title = armed ? 'Pausing at the end of this line — Jellyfin’s play carries on (Z)'
-      : S.video && S.video.paused ? 'Play this line again and pause at its end (Z)'
-        : 'Pause at the end of this line (Z)';
+    const title = armed ? 'Playing this line again, pausing at its end — Jellyfin’s play carries on (Z)'
+      : 'Play this line again and pause at its end (Z)';
     autoBtn.title = title;
     autoBtn.setAttribute('aria-label', title);
   }
+
+  // Show a hidden explanation: a speech bubble in Zimu's bar, left of the
+  // flashcards, only while the line on screen has one tucked away.
+  const showBtn = osdButton('chat_bubble', 'chat_bubble', 'Show Claude’s explanation of this line', () => openExplain(Number(showBtn.dataset.cue)));
+  showBtn.classList.add('zimu-osd-show');
 
   function cassetteIcon() {
     const NS = 'http://www.w3.org/2000/svg';
@@ -313,6 +317,7 @@
       speedBox,
       fasterBtn),
     h('div', { class: 'zimu-osd-end' },
+      showBtn,
       osdButton('style', 'style', 'Zimu flashcards', () => send({ type: 'openCards' })),
       settingsBtn));
 
@@ -349,6 +354,43 @@
       const c = getComputedStyle(span, '::before').content;
       if (!c || c === 'none' || c === 'normal' || c === '""') span.textContent = span.dataset.fallback;
     });
+  }
+
+  // ---- card marks on Jellyfin's seek bar -----------------------------------
+  // A green tick where each flashcard from this video was made. Jellyfin's
+  // slider (emby-slider) keeps its own chapter markers in a sibling of the
+  // <input>, so ours go in one too.
+
+  const marks = h('div', { class: 'zimu-marks', 'aria-hidden': 'true' });
+  let markCards = [];
+
+  function mountMarks() {
+    const bar = activeOsdBar();
+    const controls = bar && bar.closest('.osdControls');
+    const slider = controls && controls.querySelector('.osdPositionSlider');
+    const holder = slider && slider.parentElement;
+    if (!holder || marks.parentElement === holder) return;
+    holder.classList.add('zimu-marked');
+    holder.append(marks);
+    paintMarks();
+  }
+
+  const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+  function paintMarks() {
+    marks.textContent = '';
+    const v = S.video;
+    const dur = (S.item && S.item.RunTimeTicks ? S.item.RunTimeTicks / 1e7 : 0) || (v && Number.isFinite(v.duration) ? v.duration : 0);
+    if (!S.itemId || !dur || isOff()) return;
+    const seen = new Set();
+    for (const c of markCards) {
+      const src = c.source;
+      if (!src || src.itemId !== S.itemId || typeof src.start !== 'number') continue;
+      const pct = Math.max(0, Math.min(100, (src.start / dur) * 100)).toFixed(3);
+      if (seen.has(pct)) continue; // several words from one line: one tick
+      seen.add(pct);
+      marks.append(h('span', { class: 'zimu-mark', style: `left:${pct}%`, title: `${c.hanzi} · ${fmtTime(src.start)}` }));
+    }
   }
 
   // Why Zimu has nothing to show; the disabled switch's tooltip.
@@ -419,6 +461,7 @@
     paintStop();
     paintSpeed(st.speed);
     applySpeed();
+    paintMarks();
     render(true);
   }
 
@@ -625,28 +668,23 @@
     seek(cue.start - 0.15);
   }
 
-  // The Zimu button (Z), one shot. Playing: stop at the end of the line on
-  // screen, or of the next line in a silence. Paused: play the current line
-  // again from its start and stop at its end. Jellyfin's play button always
-  // carries on (videoEvents.play drops the pending stop).
+  // The Zimu button (Z), one shot, playing or paused: play the line on screen
+  // again from its start and stop at its end. In a silence it's the next line
+  // while playing, the line just finished while paused. Jellyfin's play
+  // button always carries on (videoEvents.play drops the pending stop).
   function lineStop() {
     const v = S.video;
     if (!v || !S.zh.length || isOff()) return;
     const t = v.currentTime;
     const active = Z.activeIndex(S.zh, t);
     const last = Z.lastStartedIndex(S.zh, t);
-    if (v.paused) {
-      const i = active >= 0 ? active : S.shown >= 0 ? S.shown : Math.max(0, last);
-      setStopAt(i);
-      S.clipEnd = null;
-      seek(S.zh[i].start - 0.15);
-      hint('Playing the line again');
-    } else {
-      const i = active >= 0 ? active : last + 1;
-      if (i >= S.zh.length) { hint('No more lines'); return; }
-      setStopAt(i);
-      hint('Pausing at the end of the line');
-    }
+    const onScreen = active >= 0 ? active : S.shown >= 0 ? S.shown : -1;
+    const i = onScreen >= 0 ? onScreen : v.paused ? Math.max(0, last) : last + 1;
+    if (i >= S.zh.length) { hint('No more lines'); return; }
+    setStopAt(i);
+    S.clipEnd = null;
+    seek(S.zh[i].start - 0.15);
+    hint(onScreen >= 0 || v.paused ? 'Playing the line again' : 'Playing the next line');
   }
 
   // Pausing on behalf of a hover or an open popup; resume only if we paused.
@@ -971,22 +1009,15 @@
     if (S.anchor === i) showExplainButton(i);
   }
 
-  // The stand-in for a hidden explanation: in the panel's corner, for the
-  // line on screen, only while the panel is hidden.
-  let showBtn = null;
+  // The speech bubble in Zimu's bar stands in for a hidden explanation, for
+  // the line on screen, only while the panel is hidden.
   function showExplainButton(i) {
     if (explainPanel) return;
-    if (!showBtn) {
-      showBtn = h('button', { class: 'zimu-x-show', title: 'Show Claude’s explanation of this line', onmousedown: (e) => e.stopPropagation(), onclick: (e) => {
-        e.stopPropagation();
-        openExplain(Number(showBtn.dataset.cue));
-      } }, 'Show explanation');
-    }
     showBtn.dataset.cue = i;
-    if (!showBtn.isConnected) root.append(showBtn);
+    showBtn.classList.add('zimu-avail');
   }
   function hideExplainButton() {
-    if (showBtn) showBtn.remove();
+    showBtn.classList.remove('zimu-avail');
   }
 
   const EXPLAIN_ERRORS = {
@@ -1094,7 +1125,7 @@
   async function syncExplain() {
     const i = S.anchor;
     if (explainPanel && Number(explainPanel.dataset.cue) !== i) closeExplain();
-    if (showBtn && Number(showBtn.dataset.cue) !== i) hideExplainButton();
+    if (Number(showBtn.dataset.cue) !== i) hideExplainButton();
     if (i < 0 || explainPanel || !S.settings.explainOnHover || isOff()) return;
     const key = explainKey(i);
     if (!key) return;
@@ -1359,7 +1390,7 @@
       paintStop();
       kick();
     },
-    loadedmetadata: () => applySpeed(),
+    loadedmetadata: () => { applySpeed(); paintMarks(); },
     playing: () => {
       applySpeed();
       if (!S.itemId || Date.now() - S.lastSync > 3000) syncNowPlaying('start');
@@ -1444,6 +1475,7 @@
         root.style.setProperty('--zimu-bar', `${controls.offsetHeight + Math.round(pad)}px`);
       }
       mountOsd();
+      mountMarks();
       if (!S.video.paused) kick(); // keeps the loop alive if a frame was missed
       if (!S.video.paused && Date.now() - S.lastSync > 15000) syncNowPlaying('poll');
     }
@@ -1473,8 +1505,9 @@
   // ---- startup ---------------------------------------------------------------
 
   Z.Settings.get().then((s) => { S.settings = s; applySettings(); });
-  Z.Cards.all().then((cards) => { S.saved = new Set(cards.map((c) => c.hanzi)); });
-  Z.Cards.onChange((cards) => { S.saved = new Set(cards.map((c) => c.hanzi)); render(true); });
+  const takeCards = (cards) => { S.saved = new Set(cards.map((c) => c.hanzi)); markCards = cards; paintMarks(); };
+  Z.Cards.all().then(takeCards);
+  Z.Cards.onChange((cards) => { takeCards(cards); render(true); });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.settings) {
       // values still waiting to save are newer than this echo

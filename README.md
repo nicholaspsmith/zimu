@@ -109,7 +109,7 @@ use, so the video behind the subtitles is a gradient rather than a show.
   of the next line); the pause sign through the tape blinks until then.
   While paused, it plays the current line again from its start and stops at
   its end. Jellyfin's own play button always carries on without stopping.
-- **Speed** from 40% to 110% in 1% steps: drag the slider between − and +,
+- **Speed** from 40% to 100% in 1% steps: drag the slider between − and +,
   click − / +, or hold them to run through the range (it speeds up the longer
   you hold), or use **[ ]** (1%) and **{ }** (5%). Pitch is kept, so voices sound natural, just slower.
 - **Colour by tone** (⚙): 1 blue, 2 green, 3 orange, 4 red, neutral grey.

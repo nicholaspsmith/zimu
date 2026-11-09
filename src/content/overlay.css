@@ -103,7 +103,7 @@ html.zimu-hide-native video::cue {
 .zimu-speed-box { display: inline-flex; align-items: center; font: 600 1em/1 system-ui, -apple-system, sans-serif; }
 .zimu-speed-readout { min-width: 3.3ch; text-align: right; font-variant-numeric: tabular-nums; }
 .zimu-speed-slider {
-  --zimu-fill: 85.7%;
+  --zimu-fill: 100%;
   --zimu-track: linear-gradient(to right, var(--zimu-tone2) var(--zimu-fill), rgba(255, 255, 255, 0.25) var(--zimu-fill));
   width: 7.5em;
   height: 1.4em;

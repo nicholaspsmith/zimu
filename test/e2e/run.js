@@ -282,7 +282,7 @@ async function waitFor(fn, ms = 8000, step = 100) {
       await sleep(150);
     };
 
-    // keys: [ ] step 1%, { } step 5%, clamped to 40–110%
+    // keys: [ ] step 1%, { } step 5%, clamped to 40–100%
     for (let i = 0; i < 5; i++) await page.keyboard.press('[');
     await sleep(300);
     const r95 = [await rate(), await speedValue()];
@@ -291,11 +291,11 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const r40 = await rate();
     for (let i = 0; i < 15; i++) await page.keyboard.press('}');
     await sleep(300);
-    const r110 = await rate();
+    const r100 = await rate();
     await page.keyboard.press(']');
     await sleep(150);
-    check('speed keys: 40–110% in 1% steps', Math.abs(r95[0] - 0.95) < 1e-9 && r95[1] === '95' && Math.abs(r40 - 0.4) < 1e-9 && Math.abs(r110 - 1.1) < 1e-9 && Number(await speedValue()) === 110,
-      `${r95.join(' ')} ${r40} ${r110}`);
+    check('speed keys: 40–100% in 1% steps, capped at 100', Math.abs(r95[0] - 0.95) < 1e-9 && r95[1] === '95' && Math.abs(r40 - 0.4) < 1e-9 && Math.abs(r100 - 1) < 1e-9 && Number(await speedValue()) === 100,
+      `${r95.join(' ')} ${r40} ${r100}`);
     await setSlider(100);
 
     // a slider between − and +, not a number box
@@ -312,7 +312,7 @@ async function waitFor(fn, ms = 8000, step = 100) {
         colours: [...new Set(['.zimu-osd-toggle', '.zimu-osd-btn', '.zimu-speed-box'].map((s) => getComputedStyle(document.querySelector(s)).color))],
       };
     });
-    check('speed is a 40–110% slider between − and +, showing its value', !speedUi.input && speedUi.type === 'range' && speedUi.min === '40' && speedUi.max === '110' &&
+    check('speed is a 40–100% slider between − and +, showing its value', !speedUi.input && speedUi.type === 'range' && speedUi.min === '40' && speedUi.max === '100' &&
       speedUi.between && speedUi.readout === '100%', JSON.stringify(speedUi));
     check('the speed slider is 7.5em long', Math.abs(speedUi.widthEm - 7.5) < 0.01, String(speedUi.widthEm));
     check('Zimu’s bar controls are the second-tone green', speedUi.colours.length === 1 && speedUi.colours[0] === 'rgb(95, 208, 104)', speedUi.colours.join(' '));

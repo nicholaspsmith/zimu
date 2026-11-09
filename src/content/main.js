@@ -42,7 +42,7 @@
     weePaused: false,
     saved: new Set(),
     mt: new Map(), // zh text -> english | Promise
-    dismissedKeys: new Set(), // explanations closed with × this session
+    dismissedKeys: new Set(), // explanations hidden this session (a Show button stands in)
     status: '',
     syncing: false,
     lastSync: 0,
@@ -380,7 +380,7 @@
     const offShows = off ? [...rest, S.showKey].slice(-OFF_SHOWS_KEPT) : rest;
     S.settings.offShows = offShows;
     Z.Settings.set({ offShows });
-    if (off) { closePopup(); closeExplain(); setStopAt(-1); }
+    if (off) { closePopup(); closeExplain(); hideExplainButton(); setStopAt(-1); }
     applySettings();
     if (panel) { togglePanel(false); togglePanel(true); }
     if (off) flash('Zimu off for this show · Shift+Z turns it back on');
@@ -941,8 +941,9 @@
   // Clicking the subtitle box (not a word) explains the line. The panel stays
   // up while its line is on screen: playback, word popups and mouse movement
   // don't close it; a different line does, and coming back to an explained
-  // line shows it again (from the saved copy). × / Esc dismiss it for good —
-  // it only comes back when the line is clicked again.
+  // line shows it again (from the saved copy). Hide / Esc tuck it away: while
+  // a hidden explanation's line is on screen a small Show button stands where
+  // the panel was, and clicking it (or the line) brings the panel back.
 
   const explainJobs = new Map(); // key → { text, state, cached, error, subs }
 
@@ -959,13 +960,33 @@
     }
   }
 
+  // Hide: the panel goes, a Show button takes its place while the line is up.
   function dismissExplain() {
-    if (explainPanel) {
-      const key = explainPanel.dataset.key;
-      S.dismissedKeys.add(key);
-      Z.Sentences.setDismissed(key, true); // remembered with the saved sentence
-    }
+    if (!explainPanel) return;
+    const key = explainPanel.dataset.key;
+    const i = Number(explainPanel.dataset.cue);
+    S.dismissedKeys.add(key);
+    Z.Sentences.setDismissed(key, true); // remembered with the saved sentence
     closeExplain();
+    if (S.anchor === i) showExplainButton(i);
+  }
+
+  // The stand-in for a hidden explanation: in the panel's corner, for the
+  // line on screen, only while the panel is hidden.
+  let showBtn = null;
+  function showExplainButton(i) {
+    if (explainPanel) return;
+    if (!showBtn) {
+      showBtn = h('button', { class: 'zimu-x-show', title: 'Show Claude’s explanation of this line', onmousedown: (e) => e.stopPropagation(), onclick: (e) => {
+        e.stopPropagation();
+        openExplain(Number(showBtn.dataset.cue));
+      } }, 'Show explanation');
+    }
+    showBtn.dataset.cue = i;
+    if (!showBtn.isConnected) root.append(showBtn);
+  }
+  function hideExplainButton() {
+    if (showBtn) showBtn.remove();
   }
 
   const EXPLAIN_ERRORS = {
@@ -1025,6 +1046,7 @@
     const key = explainKey(i);
     if (!cue || !key) return;
     closeExplain();
+    hideExplainButton();
     if (S.dismissedKeys.delete(key) || pause) Z.Sentences.setDismissed(key, false);
     if (pause && S.video && !S.video.paused) S.video.pause();
 
@@ -1034,7 +1056,7 @@
       h('span', { class: 'zimu-muted zimu-x-status' }));
     const pinyin = cue.zhText.split('\n').map((l) => tokenize(l).filter((t) => t.han).map(tokenPinyin).join(' ')).join(' / ');
     const panelEl = h('div', { class: 'zimu-explain', 'data-cue': i, 'data-key': key, onmousedown: (e) => e.stopPropagation() },
-      h('button', { class: 'zimu-x', title: 'Close (Esc)', onclick: () => dismissExplain() }, '×'),
+      h('button', { class: 'zimu-x zimu-x-hide', title: 'Hide the explanation (Esc) — a Show button takes its place', onclick: () => dismissExplain() }, 'Hide'),
       h('div', { class: 'zimu-x-line' }, cue.zhText.replace(/\n/g, ' ')),
       h('div', { class: 'zimu-x-py' }, pinyin),
       body, foot);
@@ -1066,20 +1088,26 @@
     paint();
   }
 
-  // Called when the line on screen changes: drop a panel for another line,
-  // and bring back the saved explanation of an already-explained one.
+  // Called when the line on screen changes: drop a panel (or Show button) for
+  // another line, and bring back the saved explanation of an already-explained
+  // one — as the panel, or as the Show button if it was hidden.
   async function syncExplain() {
     const i = S.anchor;
     if (explainPanel && Number(explainPanel.dataset.cue) !== i) closeExplain();
+    if (showBtn && Number(showBtn.dataset.cue) !== i) hideExplainButton();
     if (i < 0 || explainPanel || !S.settings.explainOnHover || isOff()) return;
     const key = explainKey(i);
-    if (!key || S.dismissedKeys.has(key)) return;
+    if (!key) return;
     let known = explainJobs.has(key);
+    let hidden = S.dismissedKeys.has(key);
     if (!known) {
       const saved = await Z.Sentences.get(key);
-      known = !!saved && !saved.dismissed;
+      known = !!saved;
+      hidden = hidden || !!(saved && saved.dismissed);
     }
-    if (known && S.anchor === i && !explainPanel && !S.dismissedKeys.has(key)) openExplain(i);
+    if (!known || S.anchor !== i || explainPanel) return;
+    if (hidden) showExplainButton(i);
+    else openExplain(i);
   }
 
   // A click on the box that isn't on a word (the English line, punctuation,

@@ -60,8 +60,10 @@ use, so the video behind the subtitles is a gradient rather than a show.
   actor). Cut-off lines get a best guess at where they were heading.
   Opening one pauses the video. The panel (right-hand side) stays while that
   line is on screen — through playback, word popups and mouse movement — and
-  comes back whenever you return to the line. × or Esc closes it for good;
-  click the line again to bring it back (from the save, no new charge).
+  comes back whenever you return to the line. **Hide** (or Esc) tucks it
+  away; while that line is on screen a small *Show explanation* button
+  stands in its corner, and it or clicking the line brings the panel back
+  (from the save, no new charge).
   Scrolling it never changes Jellyfin's volume.
   Needs your Anthropic API key (🗂 → Settings); uses Claude Opus 5.5 at low
   effort, about 1¢ per new line, and each line is explained once.

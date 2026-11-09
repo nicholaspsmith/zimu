@@ -132,6 +132,8 @@ test('estimating when a word is spoken inside a line', () => {
 test('short gloss picks one everyday sense and trims it', () => {
   // first sense, parentheticals and classifiers dropped
   assert.equal(Z.shortGloss(['coffee', 'CL:杯[bei1]']), 'coffee');
+  // synonyms inside one sense: keep the first
+  assert.equal(Z.shortGloss(['I; me; my']), 'I');
   assert.equal(Z.shortGloss(['head', 'hair (or刻: head of hair)', 'top']), 'head');
   assert.equal(Z.shortGloss(['to drink', 'My goodness!']), 'to drink');
   // a long sense is cut at a word boundary with an ellipsis

@@ -281,7 +281,7 @@
   function shortGloss(defs) {
     for (const raw of defs || []) {
       if (GLOSS_SKIP.test(raw)) continue;
-      const d = raw.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+      const d = raw.replace(/\s*\([^)]*\)/g, '').split(';')[0].replace(/\s+/g, ' ').trim();
       if (!d) continue;
       if (d.length <= GLOSS_MAX) return d;
       const cut = d.slice(0, GLOSS_MAX).replace(/\s+\S*$/, '').replace(/[,;:\s]+$/, '');

@@ -136,23 +136,23 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await sleep(200);
     await page.click('.zimu-osd-stop');
     const lineEnd = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 4.5 ? v.currentTime : null; }), 4000, 50);
-    check('the Zimu button while playing stops at the end of the line', lineEnd != null && lineEnd >= 5.85 && lineEnd < 6.05, String(lineEnd));
+    check('the Zimu button while playing plays the line again and stops at its end', lineEnd != null && lineEnd >= 5.85 && lineEnd < 6.05, String(lineEnd));
     // …and while paused: the line again from its start, stopping at its end
     await page.click('.zimu-osd-stop');
     const fromStart = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return !v.paused && v.currentTime < 4.0 ? v.currentTime : null; }), 2000, 20);
     const lineEnd2 = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 4.5 ? v.currentTime : null; }), 5000, 50);
     check('…while paused it plays the line again from its start and stops at its end', fromStart != null && fromStart >= 3.2 && lineEnd2 != null && lineEnd2 >= 5.85 && lineEnd2 < 6.05, `${fromStart} → ${lineEnd2}`);
-    // in a silence it stops at the end of the next line; Jellyfin's play carries on instead
-    await page.evaluate(() => { const v = document.querySelector('video'); v.currentTime = 3.1; v.play(); });
+    // with nothing on screen (before the first line) it plays the next line; Jellyfin's play carries on instead
+    await page.evaluate(() => { const v = document.querySelector('video'); v.currentTime = 0.1; v.play(); });
     await sleep(150);
     await page.keyboard.press('z');
-    const nextEnd = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 4.5 ? v.currentTime : null; }), 5000, 50);
+    const nextEnd = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 2.5 ? v.currentTime : null; }), 5000, 50);
     await page.evaluate(() => { const v = document.querySelector('video'); v.currentTime = 4.2; v.play(); });
     await page.keyboard.press('z');
     await sleep(100);
     await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.play(); }); // Jellyfin's play button
     const carriedOn = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return !v.paused && v.currentTime > 6.2 ? v.currentTime : null; }), 4000, 50);
-    check('Z in a silence stops at the end of the next line; Jellyfin’s play then carries on past it', nextEnd != null && nextEnd >= 5.85 && nextEnd < 6.05 && carriedOn != null, `${nextEnd} ${carriedOn}`);
+    check('Z with no line on screen plays the next line and stops at its end; Jellyfin’s play then carries on past it', nextEnd != null && nextEnd >= 2.85 && nextEnd < 3.05 && carriedOn != null, `${nextEnd} ${carriedOn}`);
     await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.2; });
     await sleep(200);
     await (await page.$$('.zimu-w'))[5].click();
@@ -161,6 +161,13 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await page.click('.zimu-save');
     const saved = await waitFor(() => page.evaluate(() => document.querySelector('.zimu-save').textContent.includes('Saved')), 8000);
     check('save to flashcards', !!saved);
+    const mark = await waitFor(() => page.evaluate(() => {
+      const m = document.querySelector('.osdControls .sliderContainer .zimu-mark');
+      if (!m) return null;
+      const v = document.querySelector('video');
+      return { left: parseFloat(m.style.left), want: (3.5 / v.duration) * 100, n: document.querySelectorAll('.zimu-mark').length, title: m.title, green: getComputedStyle(m).backgroundColor };
+    }), 3000);
+    check('a green tick on Jellyfin’s seek bar where the card was made', !!mark && Math.abs(mark.left - mark.want) < 0.5 && mark.n === 1 && /吃饭/.test(mark.title) && mark.green === 'rgb(95, 208, 104)', JSON.stringify(mark));
     await page.keyboard.press('Escape');
 
     // drag from 想 to 吃饭 → phrase popup
@@ -212,11 +219,11 @@ async function waitFor(fn, ms = 8000, step = 100) {
       };
     });
     check('no floating control bar: previous, next and auto-pause are with Zimu’s controls', !layout.toolbar &&
-      ['Previous line', 'Next line'].every((l) => layout.labels.includes(l)) && layout.labels.some((l) => /^(Pause at the end of this line|Play this line again)/.test(l)), JSON.stringify(layout));
+      ['Previous line', 'Next line'].every((l) => layout.labels.includes(l)) && layout.labels.some((l) => /^Play(ing)? this line again/.test(l)), JSON.stringify(layout));
     check('Zimu’s controls are under the visible Jellyfin controls (not a cached hidden page), aligned left with them',
       layout.inBar && layout.below && Math.abs(layout.leftGap) <= 1, JSON.stringify(layout));
     check('the row runs the Zimu switch, line controls, speed, then flashcards and settings under fullscreen',
-      /^Zimu.*,Previous line,(Pause at the end of this line|Play this line again[^,]*),Next line,Slower by 1%,.*,Faster by 1%,Zimu flashcards,Zimu subtitle settings$/.test(layout.order.join(',')) &&
+      /^Zimu.*,Previous line,Play(ing)? this line again[^,]*,Next line,Slower by 1%,.*,Faster by 1%,(Show Claude’s explanation of this line,)?Zimu flashcards,Zimu subtitle settings$/.test(layout.order.join(',')) &&
       Math.abs(layout.rightGap) <= 1, JSON.stringify({ order: layout.order, rightGap: layout.rightGap }));
     check('the line and speed controls are centred in the bar', Math.abs(layout.centreGap) <= 1, `off by ${layout.centreGap}px`);
 
@@ -272,7 +279,7 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await page.keyboard.press('z');
     const keyFlash = await waitFor(() => page.evaluate(() => (document.querySelector('.zimu-flash') || {}).textContent), 1000);
     await page.evaluate(() => document.querySelector('video').pause()); // the speed tests below want it still
-    check('a key press flashes its result while Jellyfin’s bar is hidden', /Pausing at the end of the line/.test(keyFlash || ''), String(keyFlash));
+    check('a key press flashes its result while Jellyfin’s bar is hidden', /Playing the line again/.test(keyFlash || ''), String(keyFlash));
     await page.mouse.move(10, 10);
 
     const rate = () => page.evaluate(() => document.querySelector('video').playbackRate);
@@ -611,10 +618,17 @@ async function waitFor(fn, ms = 8000, step = 100) {
 
     // Hide tucks it away and leaves a Show button; going away and back brings
     // the button, not the panel; the button reopens it (from the save, no new request)
-    const showBtn = () => page.evaluate(() => { const b = document.querySelector('.zimu-x-show'); return b && b.getClientRects().length > 0 ? b.textContent : null; });
+    // the speech bubble in Zimu's bar, left of the flashcards, only while an explanation is hidden
+    const showBtn = () => page.evaluate(() => {
+      const b = document.querySelector('.zimu-osd .zimu-osd-end .zimu-osd-show');
+      if (!b || getComputedStyle(b).display === 'none') return null;
+      return b.nextElementSibling && /flashcards/.test(b.nextElementSibling.title) ? 'Show explanation' : 'misplaced';
+    });
     await page.click('.zimu-explain .zimu-x-hide');
     await sleep(200);
     const hiddenNow = { panel: await explainText(), show: await showBtn() };
+    await setBar(true);
+    await page.screenshot({ path: path.join(OUT, '6b-explain-hidden.png') });
     await video(() => { document.querySelector('video').currentTime = 6.8; });
     await sleep(400);
     const awayShow = await showBtn();
@@ -622,7 +636,7 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await sleep(1200);
     const stayedAway = (await explainText()) === null;
     const backShow = await showBtn();
-    await page.click('.zimu-x-show');
+    await page.click('.zimu-osd .zimu-osd-show');
     const reopened = await waitFor(async () => { const t = await explainText(); return t && /Saved to Sentences/.test(t) ? t : null; }, 4000);
     const showAfter = await showBtn();
     check('Hide leaves a Show explanation button for the line on screen (not for another line); returning shows the button, not the panel',

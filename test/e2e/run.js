@@ -609,21 +609,29 @@ async function waitFor(fn, ms = 8000, step = 100) {
     check('next line hides it; going back brings it back from the save', !!gone && !!cameBack && state.claude.length === 1, `gone:${!!gone} back:${!!cameBack} requests:${state.claude.length}`);
     check('…without pausing again', await video(() => document.querySelector('video').paused), 'paused by the seek, not re-paused');
 
-    // x dismisses it for good: going away and back doesn't bring it back,
-    // clicking the line does (from the save, no new request)
-    await page.click('.zimu-explain .zimu-x');
+    // Hide tucks it away and leaves a Show button; going away and back brings
+    // the button, not the panel; the button reopens it (from the save, no new request)
+    const showBtn = () => page.evaluate(() => { const b = document.querySelector('.zimu-x-show'); return b && b.getClientRects().length > 0 ? b.textContent : null; });
+    await page.click('.zimu-explain .zimu-x-hide');
     await sleep(200);
+    const hiddenNow = { panel: await explainText(), show: await showBtn() };
     await video(() => { document.querySelector('video').currentTime = 6.8; });
     await sleep(400);
+    const awayShow = await showBtn();
     await video(() => { document.querySelector('video').currentTime = 4.3; });
     await sleep(1200);
     const stayedAway = (await explainText()) === null;
-    await page.click('.zimu-en');
+    const backShow = await showBtn();
+    await page.click('.zimu-x-show');
     const reopened = await waitFor(async () => { const t = await explainText(); return t && /Saved to Sentences/.test(t) ? t : null; }, 4000);
-    check('× dismisses it; returning doesn’t reopen it, clicking the line does (no new request)', stayedAway && !!reopened && state.claude.length === 1,
-      `stayed away:${stayedAway} reopened:${!!reopened} requests:${state.claude.length}`);
+    const showAfter = await showBtn();
+    check('Hide leaves a Show explanation button for the line on screen (not for another line); returning shows the button, not the panel',
+      hiddenNow.panel === null && hiddenNow.show === 'Show explanation' && awayShow === null && stayedAway && backShow === 'Show explanation',
+      JSON.stringify({ hiddenNow, awayShow, stayedAway, backShow }));
+    check('the Show button brings the explanation back from the save (no new request) and goes away', !!reopened && showAfter === null && state.claude.length === 1,
+      `reopened:${!!reopened} show:${showAfter} requests:${state.claude.length}`);
     // drag-selecting a phrase doesn't also open an explanation
-    await page.click('.zimu-explain .zimu-x');
+    await page.click('.zimu-explain .zimu-x-hide');
     const ws = await page.$$('.zimu-w');
     const wa = await ws[1].boundingBox();
     const wb = await ws[3].boundingBox();

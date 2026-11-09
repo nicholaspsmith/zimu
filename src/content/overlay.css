@@ -282,6 +282,26 @@ html.zimu-hide-native video::cue {
 .zimu-panel.zimu-panel-osd { position: fixed; left: auto; transform: none; }
 
 /* sentence explanation */
+.zimu-explain .zimu-x-hide { font: 500 12px/1 system-ui, sans-serif; top: 10px; right: 12px; padding: 4px 6px; border-radius: 6px; }
+.zimu-explain .zimu-x-hide:hover { background: rgba(255, 255, 255, 0.1); }
+/* stands where the panel was while the explanation is hidden */
+.zimu-x-show {
+  all: unset;
+  pointer-events: auto;
+  position: fixed;
+  right: 16px;
+  top: 10vh;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(24, 25, 30, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  font: 500 13px/1 system-ui, -apple-system, sans-serif;
+  color: #c9cdd4;
+  cursor: pointer;
+}
+.zimu-x-show:hover { color: #fff; background: rgba(40, 42, 48, 0.95); }
+#zimu-root.zimu-off > .zimu-x-show { display: none; }
 .zimu-explain {
   pointer-events: auto;
   position: fixed; /* right-hand side, clear of the subtitles and word popups */

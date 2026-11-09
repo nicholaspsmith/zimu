@@ -39,6 +39,10 @@ use, so the video behind the subtitles is a gradient rather than a show.
 - **Hanzi, pinyin with tone marks and English**, each switchable on its own
   (hanzi + pinyin, English + pinyin, pinyin only, …). Pinyin is
   context-aware (还 hái/huán, 睡着 shuìzháo, 哪儿 nǎr).
+- **Meanings** (⚙ ▸ Show): a short gloss under each word, in the pinyin's
+  size and colour, so 咖啡 reads *kāfēi* above and *coffee* below. One
+  everyday sense from CC-CEDICT, trimmed; words the dictionary lacks get an
+  empty row so the line keeps its shape. Off by default.
 - **Click a word** for its CC-CEDICT definitions, a character breakdown and
   a 🔊 pronunciation — and playback jumps to where that word is said and
   carries on (with Auto-pause on, it stops at the end of the line as usual).

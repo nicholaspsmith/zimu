@@ -492,6 +492,19 @@ async function waitFor(fn, ms = 8000, step = 100) {
     })));
     check('tone colours: 1 blue, 2 green, 3 orange, 4 red, neutral grey', tones[1] === 'rgb(90, 169, 255)' && tones[2] === 'rgb(95, 208, 104)' && tones[3] === 'rgb(255, 154, 46)' &&
       tones[4] === 'rgb(255, 92, 92)' && tones[5] === 'rgb(200, 200, 200)', JSON.stringify(tones));
+    // display mode: meanings under each word (hanzi + pinyin + gloss columns)
+    await cards.evaluate(() => chrome.storage.local.set({ settings: { showGloss: true } }));
+    await sleep(400);
+    const gloss = await page.evaluate(() => {
+      const words = [...document.querySelectorAll('.zimu-zh .zimu-w')];
+      const g = words.map((w) => w.querySelector('.zimu-g'));
+      const rt = document.querySelector('.zimu-zh rt');
+      const g0 = g.find((x) => x && x.textContent);
+      const same = g0 && rt && getComputedStyle(g0).fontSize === getComputedStyle(rt).fontSize && getComputedStyle(g0).color === getComputedStyle(rt).color;
+      return { words: words.length, glossed: g.filter((x) => x && x.textContent).length, sample: g0 ? g0.textContent : '', same };
+    });
+    check('meanings: every word has a gloss row, most are filled, pinyin-sized', gloss.words > 0 && gloss.glossed >= gloss.words / 2 && gloss.same, JSON.stringify(gloss));
+    await page.screenshot({ path: path.join(OUT, '4b-meanings.png') });
     await cards.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
     // clicking the box (not a word) explains the sentence; hovering doesn't

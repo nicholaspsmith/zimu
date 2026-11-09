@@ -113,6 +113,12 @@
 
   const tokenPinyin = (t) => t.py.join('');
 
+  // A short meaning for the row under a word; '' when the dictionary has none.
+  function glossFor(word) {
+    const e = S.dict ? S.dict.lookup(word)[0] : null;
+    return e ? Z.shortGloss(e.defs) : '';
+  }
+
   // ---- machine translation ------------------------------------------------
 
   function mt(text) {
@@ -382,6 +388,7 @@
     const st = S.settings;
     const showH = st.showHanzi;
     const showP = st.showPinyin;
+    const showG = st.showGloss;
     if (!showH && !showP) return;
     let pos = 0; // code-point offset in cue.zhText, for word timing
     cue.zhText.split('\n').forEach((line, li) => {
@@ -399,18 +406,24 @@
         const ti = S.tokens.length;
         S.tokens.push({ ...t, lineToks, k, from, to: pos });
         const w = h('span', { class: 'zimu-w' + (S.saved.has(t.text) ? ' zimu-saved' : ''), 'data-t': ti });
+        // the word itself; with a gloss on, it is the top half of a column
+        const word = showG ? h('span', { class: 'zimu-wt' }) : w;
         if (showH) {
           t.chars.forEach((c, k) => {
             const tone = st.toneColors ? ` zimu-t${Z.toneOf(t.py[k])}` : '';
-            if (showP) w.append(h('ruby', { class: tone.trim() }, c, h('rt', null, t.py[k])));
-            else w.append(h('span', { class: tone.trim() }, c));
+            if (showP) word.append(h('ruby', { class: tone.trim() }, c, h('rt', null, t.py[k])));
+            else word.append(h('span', { class: tone.trim() }, c));
           });
         } else {
           w.classList.add('zimu-py-only');
           t.py.forEach((p, k) => {
             const tone = st.toneColors ? `zimu-t${Z.toneOf(p)}` : '';
-            w.append(h('span', { class: tone }, p || t.chars[k]));
+            word.append(h('span', { class: tone }, p || t.chars[k]));
           });
+        }
+        if (showG) {
+          w.classList.add('zimu-glossed');
+          w.append(word, h('span', { class: 'zimu-g' }, glossFor(t.text)));
         }
         row.append(w);
       }
@@ -1066,7 +1079,7 @@
     };
     panel = h('div', { class: 'zimu-panel', onmousedown: (e) => e.stopPropagation() },
       h('div', { class: 'zimu-panel-title' }, 'Show'),
-      h('div', { class: 'zimu-row-flex' }, check('showHanzi', 'Hanzi'), check('showPinyin', 'Pinyin'), check('showEnglish', 'English')),
+      h('div', { class: 'zimu-row-flex' }, check('showHanzi', 'Hanzi'), check('showPinyin', 'Pinyin'), check('showGloss', 'Meanings'), check('showEnglish', 'English')),
       h('div', { class: 'zimu-panel-title' }, 'Tracks'),
       h('label', { class: 'zimu-field' }, 'Chinese', zhSel),
       h('label', { class: 'zimu-field' }, 'English', enSel),

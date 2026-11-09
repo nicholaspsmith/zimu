@@ -269,6 +269,11 @@
 
   const isDue = (card, now = Date.now()) => (card.due || 0) <= now;
 
+  // A card's identity for syncing and deleting: one word card per headword,
+  // but a note (a highlight from an explanation) is its own card even when it
+  // names the same word.
+  const cardKey = (card) => (card.kind === 'note' ? `c:note:${card.id}` : `c:${card.hanzi}`);
+
 
   // ---- word gloss (the row under each word) ------------------------------
 
@@ -334,6 +339,7 @@
     estimateSpan,
     schedule,
     isDue,
+    cardKey,
     shortGloss,
     BOX_DAYS,
     formatTime,

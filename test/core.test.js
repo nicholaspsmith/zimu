@@ -144,3 +144,9 @@ test('short gloss picks one everyday sense and trims it', () => {
   assert.equal(Z.shortGloss([]), '');
   assert.equal(Z.shortGloss(['see 什么[shen2 me5]']), '');
 });
+
+test('cardKey: one word card per headword, every note its own', () => {
+  assert.equal(Z.cardKey({ kind: 'word', hanzi: '哪儿' }), 'c:哪儿');
+  assert.equal(Z.cardKey({ hanzi: '哪儿' }), 'c:哪儿'); // older cards have no kind
+  assert.equal(Z.cardKey({ kind: 'note', hanzi: '哪儿', id: 'abc' }), 'c:note:abc');
+});

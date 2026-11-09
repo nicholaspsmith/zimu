@@ -178,7 +178,7 @@
   }
 
   const SPEED_MIN = 40;
-  const SPEED_MAX = 110;
+  const SPEED_MAX = 100;
   const clampSpeed = (n) => Math.max(SPEED_MIN, Math.min(SPEED_MAX, Math.round(n)));
   const speedSlider = h('input', {
     class: 'zimu-speed-slider',

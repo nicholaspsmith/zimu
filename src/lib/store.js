@@ -19,7 +19,7 @@
     pauseOnHover: false,
     playWordOnClick: true, // clicking a word plays it from the video
     explainOnHover: true, // Claude explains the line when the box (not a word) is clicked
-    speed: 100, // playback speed in %, 40-110
+    speed: 100, // playback speed in %, 40-100
     hideNativeSubs: true,
     toneColors: false,
     machineTranslate: true, // when no English subtitle track exists

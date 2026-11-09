@@ -131,15 +131,28 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await page.evaluate(() => [...document.querySelectorAll('.zimu-popup .zimu-btn')].find((b) => b.textContent.includes('Hear it')).click());
     const wordOnly = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 4.6 ? v.currentTime : null; }), 4000, 50);
     check('▶ Hear it plays just the word and stops', wordOnly != null && wordOnly >= 5.8 && wordOnly < 6.1, String(wordOnly));
-    // with auto-pause on, a word click stops at the end of the line
-    await cardsSet({ autoPause: true });
-    const wAuto = await page.$$('.zimu-w');
-    await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.2; });
+    // the Zimu button while playing: stop at the end of this line
+    await page.evaluate(() => { const v = document.querySelector('video'); v.currentTime = 4.2; v.play(); });
     await sleep(200);
-    await wAuto[2].click(); // 想
+    await page.click('.zimu-osd-stop');
     const lineEnd = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 4.5 ? v.currentTime : null; }), 4000, 50);
-    check('…with auto-pause on it stops at the end of the line', lineEnd != null && lineEnd >= 5.85 && lineEnd < 6.05, String(lineEnd));
-    await cardsSet({ autoPause: false });
+    check('the Zimu button while playing stops at the end of the line', lineEnd != null && lineEnd >= 5.85 && lineEnd < 6.05, String(lineEnd));
+    // …and while paused: the line again from its start, stopping at its end
+    await page.click('.zimu-osd-stop');
+    const fromStart = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return !v.paused && v.currentTime < 4.0 ? v.currentTime : null; }), 2000, 20);
+    const lineEnd2 = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 4.5 ? v.currentTime : null; }), 5000, 50);
+    check('…while paused it plays the line again from its start and stops at its end', fromStart != null && fromStart >= 3.2 && lineEnd2 != null && lineEnd2 >= 5.85 && lineEnd2 < 6.05, `${fromStart} → ${lineEnd2}`);
+    // in a silence it stops at the end of the next line; Jellyfin's play carries on instead
+    await page.evaluate(() => { const v = document.querySelector('video'); v.currentTime = 3.1; v.play(); });
+    await sleep(150);
+    await page.keyboard.press('z');
+    const nextEnd = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return v.paused && v.currentTime > 4.5 ? v.currentTime : null; }), 5000, 50);
+    await page.evaluate(() => { const v = document.querySelector('video'); v.currentTime = 4.2; v.play(); });
+    await page.keyboard.press('z');
+    await sleep(100);
+    await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.play(); }); // Jellyfin's play button
+    const carriedOn = await waitFor(() => page.evaluate(() => { const v = document.querySelector('video'); return !v.paused && v.currentTime > 6.2 ? v.currentTime : null; }), 4000, 50);
+    check('Z in a silence stops at the end of the next line; Jellyfin’s play then carries on past it', nextEnd != null && nextEnd >= 5.85 && nextEnd < 6.05 && carriedOn != null, `${nextEnd} ${carriedOn}`);
     await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.currentTime = 4.2; });
     await sleep(200);
     await (await page.$$('.zimu-w'))[5].click();
@@ -199,11 +212,11 @@ async function waitFor(fn, ms = 8000, step = 100) {
       };
     });
     check('no floating control bar: previous, next and auto-pause are with Zimu’s controls', !layout.toolbar &&
-      ['Previous line', 'Next line', 'Pause at the end of each line'].every((l) => layout.labels.includes(l)), JSON.stringify(layout));
+      ['Previous line', 'Next line'].every((l) => layout.labels.includes(l)) && layout.labels.some((l) => /^(Pause at the end of this line|Play this line again)/.test(l)), JSON.stringify(layout));
     check('Zimu’s controls are under the visible Jellyfin controls (not a cached hidden page), aligned left with them',
       layout.inBar && layout.below && Math.abs(layout.leftGap) <= 1, JSON.stringify(layout));
     check('the row runs the Zimu switch, line controls, speed, then flashcards and settings under fullscreen',
-      /^Zimu.*,Previous line,Pause at the end of each line,Next line,Slower by 1%,.*,Faster by 1%,Zimu flashcards,Zimu subtitle settings$/.test(layout.order.join(',')) &&
+      /^Zimu.*,Previous line,(Pause at the end of this line|Play this line again[^,]*),Next line,Slower by 1%,.*,Faster by 1%,Zimu flashcards,Zimu subtitle settings$/.test(layout.order.join(',')) &&
       Math.abs(layout.rightGap) <= 1, JSON.stringify({ order: layout.order, rightGap: layout.rightGap }));
     check('the line and speed controls are centred in the bar', Math.abs(layout.centreGap) <= 1, `off by ${layout.centreGap}px`);
 
@@ -234,21 +247,32 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const preved = await waitFor(() => page.evaluate(() => { const t = document.querySelector('video').currentTime; return t >= 0.3 && t < 3 ? t : null; }), 3000);
     check('previous and next line buttons in the bar move between lines', !!nexted && !!preved, `${nexted} ${preved}`);
     await page.evaluate(() => document.querySelector('video').pause());
-    await clickBar('Pause at the end');
+    await sleep(100);
+    const stopState = () => page.$eval('.zimu-osd-stop', (b) => {
+      const mark = b.querySelector('.zimu-cassette .zimu-pause-mark');
+      const s = mark && getComputedStyle(mark);
+      return { on: b.classList.contains('zimu-on'), mark: !!mark && s.display !== 'none', blink: !!mark && s.animationName === 'zimu-blink', title: b.title };
+    });
+    const stopIdle = await stopState();
+    await page.click('.zimu-osd-stop'); // paused: plays the line again, stop pending
     await sleep(200);
-    const autoOn = await page.$eval('.zimu-osd-btn[title^="Pause at the end"]', (b) => b.classList.contains('zimu-on'));
-    await clickBar('Pause at the end');
+    const stopArmed = await stopState();
+    await page.evaluate(() => { const v = document.querySelector('video'); v.pause(); v.play(); }); // Jellyfin's play
     await sleep(200);
-    const autoOff = await page.$eval('.zimu-osd-btn[title^="Pause at the end"]', (b) => b.classList.contains('zimu-on'));
-    check('the auto-pause button shows its state', autoOn && !autoOff, `${autoOn} ${autoOff}`);
+    const stopCleared = await stopState();
+    check('the Zimu button shows a pending stop: plain cassette, then a blinking pause sign, plain again after Jellyfin’s play',
+      !stopIdle.on && !stopIdle.mark && stopArmed.on && stopArmed.mark && stopArmed.blink && !stopCleared.on && !stopCleared.mark, JSON.stringify({ stopIdle, stopArmed, stopCleared }));
+    const switchTitle = await page.$eval('.zimu-osd-toggle', (b) => b.title);
+    check('tooltips name the keys: Z on the Zimu button, Shift+Z on the switch',
+      /\(Z\)$/.test(stopIdle.title) && /play this line again/i.test(stopIdle.title) && /\(Z\)$/.test(stopCleared.title) && /Shift\+Z/.test(switchTitle), `"${stopIdle.title}" / "${stopCleared.title}" / "${switchTitle}"`);
 
     // with the bar tucked away, a key still says what it did
     await setBar(false);
     await sleep(900);
-    await page.keyboard.press('q');
+    await page.keyboard.press('z');
     const keyFlash = await waitFor(() => page.evaluate(() => (document.querySelector('.zimu-flash') || {}).textContent), 1000);
-    await page.keyboard.press('q');
-    check('a key press flashes its result while Jellyfin’s bar is hidden', /Auto-pause on/.test(keyFlash || ''), String(keyFlash));
+    await page.evaluate(() => document.querySelector('video').pause()); // the speed tests below want it still
+    check('a key press flashes its result while Jellyfin’s bar is hidden', /Pausing at the end of the line/.test(keyFlash || ''), String(keyFlash));
     await page.mouse.move(10, 10);
 
     const rate = () => page.evaluate(() => document.querySelector('video').playbackRate);
@@ -397,11 +421,12 @@ async function waitFor(fn, ms = 8000, step = 100) {
     check('A jumps to previous line', t >= 0.3 && t < 1.5, t.toFixed(2));
     check('a frozen overlay from an older Zimu is cleared', await page.evaluate(() => !document.querySelector('.zimu-stale') && document.querySelectorAll('#zimu-root').length === 1));
 
-    // Z switches Zimu off for this show: no overlay, no auto-pause, no speed,
-    // Jellyfin's own subtitles back; it stays off after a reload
-    await page.keyboard.press('q'); // auto-pause on, to prove it stops pausing
+    // Shift+Z switches Zimu off for this show: no overlay, no pending stop, no
+    // speed, Jellyfin's own subtitles back; it stays off after a reload
+    const shiftZ = async () => { await page.keyboard.down('Shift'); await page.keyboard.press('z'); await page.keyboard.up('Shift'); };
+    await page.keyboard.press('z'); // a stop pending, to prove switching off drops it
     await sleep(300);
-    await page.keyboard.press('z');
+    await shiftZ();
     await sleep(300);
     const offState = () => page.evaluate(() => {
       const vis = (sel) => { const el = document.querySelector(sel); return !!el && el.getClientRects().length > 0; };
@@ -419,10 +444,10 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await page.evaluate(() => { const v = document.querySelector('video'); v.currentTime = 5.0; v.play(); });
     await sleep(1600);
     const playedThrough = await page.evaluate(() => { const v = document.querySelector('video'); return [!v.paused, v.currentTime]; });
-    check('Z turns Zimu off: overlay and speed gone, tune stays, Jellyfin subs back, 100% speed',
+    check('Shift+Z turns Zimu off: overlay and speed gone, tune stays, Jellyfin subs back, 100% speed',
       !off1.lines && !off1.nativeHidden && !off1.speedBox && off1.tune && Math.abs(off1.tuneRight) <= 1 && off1.rate === 1 && /off for this show/.test(flashText),
       `${JSON.stringify(off1)} "${flashText}"`);
-    check('…and auto-pause stops pausing', playedThrough[0] && playedThrough[1] > 6.2, playedThrough.join(' '));
+    check('…and the pending stop is dropped', playedThrough[0] && playedThrough[1] > 6.2, playedThrough.join(' '));
     await page.reload();
     await waitFor(() => page.evaluate(() => /item=item1 zh=[1-9]/.test((document.getElementById('zimu-root') || { dataset: {} }).dataset.state || '')));
     await sleep(300);
@@ -443,11 +468,11 @@ async function waitFor(fn, ms = 8000, step = 100) {
     const on = await offState();
     const onText = await page.evaluate(() => document.querySelector('.zimu-zh').textContent);
     check('picking a track turns it back on', on.lines && on.nativeHidden && on.speedBox && /吃.*饭/.test(onText), `${JSON.stringify(on)} "${onText.slice(0, 20)}"`);
-    await page.keyboard.press('z');
+    await shiftZ();
     await sleep(200);
-    await page.keyboard.press('z');
+    await shiftZ();
     await sleep(200);
-    check('Z toggles it off and on again', (await offState()).lines);
+    check('Shift+Z toggles it off and on again', (await offState()).lines);
     // the Zimu switch in Jellyfin's bar does the same
     const sw = () => page.evaluate(() => {
       const b = document.querySelector('.zimu-osd .zimu-osd-toggle');

@@ -16,7 +16,6 @@
     textOpacity: 100, // % — subtitle text
     bgOpacity: 75, // % — the box behind the subtitles
     bottom: 1, // % of the window height above Jellyfin's controls
-    autoPause: false, // pause at the end of every line
     pauseOnHover: false,
     playWordOnClick: true, // clicking a word plays it from the video
     explainOnHover: true, // Claude explains the line when the box (not a word) is clicked

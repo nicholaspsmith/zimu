@@ -34,7 +34,8 @@
     anchor: -2, // index of the cue playing or last finished (-1 before the first)
     tokens: [], // flat token list of the shown cue
     sel: null, // {a, b} token range while dragging
-    autoPausedIdx: -1,
+    stopAt: -1, // index of the line at whose end the Zimu button stops playback
+    ourPlay: false, // the next play event is Zimu's own, not Jellyfin's play button
     clipEnd: null,
     pendingClip: null,
     holds: new Set(),
@@ -156,7 +157,7 @@
   root.append(lines);
 
   // ---- controls in Jellyfin's own bottom bar ---------------------------------
-  // All of Zimu's controls (switch, line stepping, auto-pause, speed, settings,
+  // All of Zimu's controls (switch, line stepping, the Zimu button, speed, settings,
   // flashcards) are a row under Jellyfin's buttons. Jellyfin re-creates that
   // bar with the player, so mountOsd() re-inserts the row whenever it's missing.
 
@@ -253,12 +254,54 @@
     zimuSwitch.classList.toggle('zimu-on', on);
     zimuSwitch.setAttribute('aria-checked', String(on));
     const title = !can ? S.status || 'Zimu: no Chinese subtitles on this video'
-      : on ? 'Zimu is on — click to turn it off for this show (Z)' : 'Zimu is off for this show — click to turn it on (Z)';
+      : on ? 'Zimu is on — click to turn it off for this show (Shift+Z)' : 'Zimu is off for this show — click to turn it on (Shift+Z)';
     zimuSwitch.title = title;
     zimuSwitch.setAttribute('aria-label', title);
   }
 
-  const autoBtn = osdButton('pause_circle_outline', 'pause_circle_outline', 'Pause at the end of each line (Q)', () => toggleAutoPause());
+  // The Zimu button: a cassette, not a glyph (Material Icons has none). While
+  // a stop is pending a pause sign cuts through the tape and blinks (CSS, .zimu-on).
+  const autoBtn = osdButton('pause_circle_outline', 'pause_circle_outline', 'Pause at the end of this line (Z)', () => lineStop());
+  autoBtn.classList.add('zimu-osd-stop');
+  autoBtn.querySelector('.material-icons').replaceWith(h('span', { class: 'largePaperIconButton material-icons zimu-cassette', 'aria-hidden': 'true' }, cassetteIcon()));
+
+  function setStopAt(i) {
+    S.stopAt = i;
+    paintStop();
+  }
+  function paintStop() {
+    const armed = S.stopAt >= 0;
+    autoBtn.classList.toggle('zimu-on', armed);
+    const title = armed ? 'Pausing at the end of this line — Jellyfin’s play carries on (Z)'
+      : S.video && S.video.paused ? 'Play this line again and pause at its end (Z)'
+        : 'Pause at the end of this line (Z)';
+    autoBtn.title = title;
+    autoBtn.setAttribute('aria-label', title);
+  }
+
+  function cassetteIcon() {
+    const NS = 'http://www.w3.org/2000/svg';
+    const el = (tag, attrs) => {
+      const n = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+      return n;
+    };
+    const svg = el('svg', { viewBox: '0 0 24 24', width: '1em', height: '1em', focusable: 'false' });
+    // The pause bars sit on a cut-out, so they read against the tape's lines.
+    const mask = el('mask', { id: 'zimu-cassette-cut', maskUnits: 'userSpaceOnUse', x: '0', y: '0', width: '24', height: '24' });
+    mask.append(el('rect', { x: '0', y: '0', width: '24', height: '24', fill: '#fff' }), el('rect', { class: 'zimu-cassette-gap', x: '8.5', y: '5', width: '7', height: '14', fill: '#000' }));
+    const tape = el('g', { class: 'zimu-cassette-tape', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.6', 'stroke-linejoin': 'round', mask: 'url(#zimu-cassette-cut)' });
+    tape.append(
+      el('rect', { x: '2', y: '4.5', width: '20', height: '15', rx: '2' }),
+      el('circle', { cx: '8', cy: '11', r: '2.2' }),
+      el('circle', { cx: '16', cy: '11', r: '2.2' }),
+      el('path', { d: 'M8 8.8h8M8 13.2h8' }), // the window between the reels
+      el('path', { d: 'M6 19.5l1.4-3h9.2l1.4 3' })); // the shoe
+    const pause = el('g', { class: 'zimu-pause-mark', fill: 'currentColor' });
+    pause.append(el('rect', { x: '9.6', y: '6', width: '1.8', height: '12', rx: '0.6' }), el('rect', { x: '12.6', y: '6', width: '1.8', height: '12', rx: '0.6' }));
+    svg.append(mask, tape, pause);
+    return svg;
+  }
 
   const osdGroup = h('div', { class: 'zimu-osd' },
     zimuSwitch,
@@ -323,7 +366,7 @@
     return shown ? osd : null;
   }
 
-  // Off for this show: no overlay, no auto-pause or speed, Jellyfin's own
+  // Off for this show: no overlay, no pending stop or speed, Jellyfin's own
   // subtitles back. Remembered per series so the next episode stays off.
   const OFF_SHOWS_KEPT = 500;
   const isOff = () => !!S.showKey && (S.settings.offShows || []).includes(S.showKey);
@@ -337,10 +380,10 @@
     const offShows = off ? [...rest, S.showKey].slice(-OFF_SHOWS_KEPT) : rest;
     S.settings.offShows = offShows;
     Z.Settings.set({ offShows });
-    if (off) { closePopup(); closeExplain(); }
+    if (off) { closePopup(); closeExplain(); setStopAt(-1); }
     applySettings();
     if (panel) { togglePanel(false); togglePanel(true); }
-    if (off) flash('Zimu off for this show · Z turns it back on');
+    if (off) flash('Zimu off for this show · Shift+Z turns it back on');
     else hint('Zimu on');
   }
 
@@ -373,7 +416,7 @@
     root.style.setProperty('--zimu-bg-alpha', String(st.bgOpacity / 100));
     root.classList.toggle('zimu-tones', !!st.toneColors);
     document.documentElement.classList.toggle('zimu-hide-native', !!st.hideNativeSubs && !!S.video && S.zhTrack != null && !off);
-    autoBtn.classList.toggle('zimu-on', !!st.autoPause);
+    paintStop();
     paintSpeed(st.speed);
     applySpeed();
     render(true);
@@ -490,11 +533,10 @@
       S.clipEnd = null;
       v.pause();
     }
-    if (S.settings.autoPause && !v.paused && S.zh.length && !isOff()) {
-      const i = Z.activeIndex(S.zh, t);
-      const cue = S.zh[i];
-      if (cue && t >= cue.end - 0.08 && S.autoPausedIdx !== i) {
-        S.autoPausedIdx = i;
+    if (S.stopAt >= 0 && !v.paused) {
+      const cue = S.zh[S.stopAt];
+      if (!cue || t >= cue.end - 0.08) {
+        setStopAt(-1);
         v.pause();
       }
     }
@@ -508,26 +550,27 @@
     if (!v) return;
     S.ourSeek = true;
     v.currentTime = Math.max(0, sec);
-    if (play && v.paused) v.play().catch(() => {});
+    if (play && v.paused) ourPlay(v);
     kick();
+  }
+
+  // Playback Zimu starts itself keeps a pending stop; Jellyfin's play button
+  // (any play that isn't ours) drops it, see videoEvents.play.
+  function ourPlay(v) {
+    S.ourPlay = true;
+    v.play().catch(() => { S.ourPlay = false; });
   }
 
   // Plays from the estimated moment code points [from, to) of cue i are
   // spoken (with a little lead-in). stopAfter: pause just after them (the
-  // ▶ Hear it button); otherwise playback carries on and auto-pause, if on,
-  // stops it at the end of the line as usual (clicking a word).
+  // ▶ Hear it button); otherwise playback carries on (clicking a word), or
+  // stops at the end of the line if the Zimu button has that pending.
   function playSpan(i, from, to, { stopAfter = false } = {}) {
     const cue = S.zh[i];
     if (!cue || from == null) return;
     const est = Z.estimateSpan(cue.zhText, from, to, cue.start, cue.end);
     const a = Math.max(cue.start - 0.1, est.start - 0.35);
-    if (stopAfter) {
-      S.autoPausedIdx = i; // auto-pause mustn't cut the clip at the line's end
-      S.clipEnd = Math.min(cue.end + 0.2, est.end + 0.35);
-    } else {
-      S.autoPausedIdx = -1;
-      S.clipEnd = null;
-    }
+    S.clipEnd = stopAfter ? Math.min(cue.end + 0.2, est.end + 0.35) : null;
     seek(a);
   }
 
@@ -574,16 +617,36 @@
     if (which === 'prev') target = active >= 0 ? active - 1 : last;
     else if (which === 'repeat') target = active >= 0 ? active : last;
     else target = last + 1;
-    const cue = S.zh[Math.max(0, Math.min(S.zh.length - 1, target))];
+    const idx = Math.max(0, Math.min(S.zh.length - 1, target));
+    const cue = S.zh[idx];
     if (!cue) return;
-    S.autoPausedIdx = -1;
+    if (S.stopAt >= 0) setStopAt(idx); // a pending stop follows the line being stepped to
     S.clipEnd = null;
     seek(cue.start - 0.15);
   }
 
-  function toggleAutoPause() {
-    Z.Settings.set({ autoPause: !S.settings.autoPause });
-    hint(!S.settings.autoPause ? 'Auto-pause on' : 'Auto-pause off');
+  // The Zimu button (Z), one shot. Playing: stop at the end of the line on
+  // screen, or of the next line in a silence. Paused: play the current line
+  // again from its start and stop at its end. Jellyfin's play button always
+  // carries on (videoEvents.play drops the pending stop).
+  function lineStop() {
+    const v = S.video;
+    if (!v || !S.zh.length || isOff()) return;
+    const t = v.currentTime;
+    const active = Z.activeIndex(S.zh, t);
+    const last = Z.lastStartedIndex(S.zh, t);
+    if (v.paused) {
+      const i = active >= 0 ? active : S.shown >= 0 ? S.shown : Math.max(0, last);
+      setStopAt(i);
+      S.clipEnd = null;
+      seek(S.zh[i].start - 0.15);
+      hint('Playing the line again');
+    } else {
+      const i = active >= 0 ? active : last + 1;
+      if (i >= S.zh.length) { hint('No more lines'); return; }
+      setStopAt(i);
+      hint('Pausing at the end of the line');
+    }
   }
 
   // Pausing on behalf of a hover or an open popup; resume only if we paused.
@@ -596,7 +659,7 @@
     S.holds.delete(reason);
     if (!S.holds.size && S.weePaused) {
       S.weePaused = false;
-      if (S.video) S.video.play().catch(() => {});
+      if (S.video) ourPlay(S.video);
     }
   }
 
@@ -1054,7 +1117,7 @@
       if (Number(v) !== S.zhTrack) chooseTracks(Number(v), 'auto');
     } },
     !off && zhOpts.length && S.zhTrack == null && h('option', { selected: true, disabled: true }, 'No Chinese text track'),
-    zhOpts.length ? h('option', { value: 'off', selected: off }, 'Off for this show (Z)') : h('option', null, 'No text subtitles'),
+    zhOpts.length ? h('option', { value: 'off', selected: off }, 'Off for this show (Shift+Z)') : h('option', null, 'No text subtitles'),
     zhOpts.map((s) => h('option', { value: s.index, selected: !off && s.index === S.zhTrack }, s.title)));
     // English comes on top of Chinese lines, so with none there's nothing to choose
     const enSel = h('select', { disabled: !S.zh.length, onchange: (e) => {
@@ -1087,7 +1150,6 @@
       check('playWordOnClick', 'Play from a word when I click it'),
       check('explainOnHover', 'Explain the sentence when I click the box (not a word)'),
       check('pauseOnHover', 'Pause while the mouse is over the subtitles'),
-      check('autoPause', 'Pause at the end of each line (Q)'),
       check('hideNativeSubs', 'Hide Jellyfin’s own subtitles'),
       check('toneColors', 'Colour by tone'),
       check('machineTranslate', 'Machine-translate when there is no English track'),
@@ -1096,7 +1158,7 @@
       range('bgOpacity', 'Background', 0, 100, '%'),
       range('fontSize', 'Size', 18, 64, 'px'),
       range('bottom', 'Height', 0, 60, '%'),
-      h('div', { class: 'zimu-muted' }, 'Keys: Z on/off · A previous · S repeat · D next · Q auto-pause · [ ] speed ±1% ({ } ±5%) · Esc close'));
+      h('div', { class: 'zimu-muted' }, 'Keys: Z pause at the end of the line (paused: play it again) · Shift+Z Zimu on/off · A previous · S repeat · D next · [ ] speed ±1% ({ } ±5%) · Esc close'));
     root.append(panel);
     const a = S.panelAnchor;
     if (a && a.isConnected) {
@@ -1141,7 +1203,7 @@
     S.zhTrack = null;
     S.showKey = null;
     S.shown = -2;
-    S.autoPausedIdx = -1;
+    setStopAt(-1);
     applySettings();
     try {
       S.item = await J.item(itemId);
@@ -1263,6 +1325,10 @@
     play: () => {
       // someone pressed play while we were holding: stop holding
       if (S.holds.size) { S.holds.clear(); S.weePaused = false; }
+      // Jellyfin's play button carries on; only Zimu's own plays keep a pending stop
+      if (!S.ourPlay) S.stopAt = -1;
+      S.ourPlay = false;
+      paintStop();
       kick();
     },
     loadedmetadata: () => applySpeed(),
@@ -1274,13 +1340,17 @@
     },
     loadstart: () => { S.itemId = null; S.zh = []; S.shown = -2; applySettings(); },
     seeking: () => {
-      if (!S.ourSeek) { S.clipEnd = null; }
+      if (!S.ourSeek) { S.clipEnd = null; setStopAt(-1); } // Jellyfin's seek bar: no clip, no stop
       S.ourSeek = false;
-      S.autoPausedIdx = -1;
       kick();
     },
     seeked: () => kick(),
-    pause: () => kick(),
+    pause: () => {
+      // a pause that isn't Zimu's hover hold drops a pending stop
+      if (!S.weePaused) S.stopAt = -1;
+      paintStop();
+      kick();
+    },
   };
 
   function attach(video) {
@@ -1359,8 +1429,8 @@
     if (/INPUT|TEXTAREA|SELECT/.test(tag) || (e.target && e.target.isContentEditable)) return;
     const k = e.key.toLowerCase();
     const sp = S.settings.speed;
-    const act = k === 'z' ? (S.showKey && S.zh.length ? () => setOff(!isOff()) : null) : isOff() || noLines() ? null : {
-      a: () => gotoLine('prev'), s: () => gotoLine('repeat'), d: () => gotoLine('next'), q: toggleAutoPause,
+    const act = k === 'z' && e.shiftKey ? (S.showKey && S.zh.length ? () => setOff(!isOff()) : null) : isOff() || noLines() ? null : {
+      z: lineStop, a: () => gotoLine('prev'), s: () => gotoLine('repeat'), d: () => gotoLine('next'),
       '[': () => setSpeed(sp - 1), ']': () => setSpeed(sp + 1), '{': () => setSpeed(sp - 5), '}': () => setSpeed(sp + 5),
     }[k];
     if (e.key === 'Escape' && (popup || panel)) { closePopup(); togglePanel(false); }

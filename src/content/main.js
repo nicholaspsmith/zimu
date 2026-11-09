@@ -193,9 +193,18 @@
   const speedReadout = h('span', { class: 'zimu-speed-readout' }, '100%');
   const speedBox = h('div', { class: 'zimu-speed-box' }, speedSlider, speedReadout);
   speedSlider.addEventListener('input', () => setSpeed(Number(speedSlider.value)));
+  // The browser runs the drag itself; nothing may get in its way: no pointer
+  // capture of our own (it breaks Firefox's native drag), no writes to the
+  // slider's value while the thumb is held, and Jellyfin's bar never sees
+  // the pointer (it would treat the press as a tap on the controls).
+  let sliderHeld = false;
+  speedSlider.addEventListener('pointerdown', () => { sliderHeld = true; });
   // After a drag the keyboard goes back to Zimu's keys and Jellyfin's.
-  speedSlider.addEventListener('pointerdown', (e) => speedSlider.setPointerCapture?.(e.pointerId));
-  speedSlider.addEventListener('pointerup', () => speedSlider.blur());
+  const sliderReleased = () => { sliderHeld = false; speedSlider.blur(); };
+  for (const ev of ['pointerup', 'pointercancel']) speedSlider.addEventListener(ev, sliderReleased);
+  speedSlider.addEventListener('change', () => { if (sliderHeld) sliderReleased(); }); // not after an arrow key
+  document.addEventListener('pointerup', () => { if (sliderHeld) sliderReleased(); }, true);
+  for (const ev of ['pointerdown', 'mousedown', 'touchstart', 'click']) speedBox.addEventListener(ev, (e) => e.stopPropagation());
   speedSlider.addEventListener('keydown', (e) => {
     e.stopPropagation(); // Jellyfin's player seeks on arrows and digits
     if (e.key === 'Escape' || e.key === 'Enter') speedSlider.blur();
@@ -323,7 +332,7 @@
 
   function paintSpeed(speed) {
     const n = clampSpeed(speed);
-    speedSlider.value = String(n);
+    if (!sliderHeld && speedSlider.value !== String(n)) speedSlider.value = String(n);
     speedSlider.style.setProperty('--zimu-fill', `${((n - SPEED_MIN) / (SPEED_MAX - SPEED_MIN)) * 100}%`);
     speedReadout.textContent = `${n}%`;
   }
@@ -1391,6 +1400,9 @@
       kick();
     },
     loadedmetadata: () => { applySpeed(); paintMarks(); },
+    // Jellyfin's own playback-speed menu sets the rate too, and re-applies it
+    // as playback starts; while Zimu is on, Zimu's slider is the speed.
+    ratechange: () => { if (!isOff() && !noLines()) applySpeed(); },
     playing: () => {
       applySpeed();
       if (!S.itemId || Date.now() - S.lastSync > 3000) syncNowPlaying('start');
@@ -1504,14 +1516,20 @@
 
   // ---- startup ---------------------------------------------------------------
 
-  Z.Settings.get().then((s) => { S.settings = s; applySettings(); });
+  Z.Settings.get().then((s) => {
+    S.settings = s;
+    if (s.speed !== clampSpeed(s.speed)) setLocal('speed', clampSpeed(s.speed)); // saved before the range changed
+    applySettings();
+  });
   const takeCards = (cards) => { S.saved = new Set(cards.map((c) => c.hanzi)); markCards = cards; paintMarks(); };
   Z.Cards.all().then(takeCards);
   Z.Cards.onChange((cards) => { takeCards(cards); render(true); });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.settings) {
       // values still waiting to save are newer than this echo
-      S.settings = { ...Z.DEFAULT_SETTINGS, ...changes.settings.newValue, ...pendingSave };
+      const next = { ...Z.DEFAULT_SETTINGS, ...changes.settings.newValue, ...pendingSave };
+      if (JSON.stringify(next) === JSON.stringify(S.settings)) return; // our own save coming back
+      S.settings = next;
       applySettings();
       if (panel && !panel.contains(document.activeElement)) { togglePanel(false); togglePanel(true); }
     }

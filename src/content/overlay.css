@@ -208,6 +208,7 @@ html.zimu-hide-native video::cue {
   flex-direction: column;
   align-items: center;
   vertical-align: top;
+  margin: 0 0.1em; /* room between neighbouring glosses */
 }
 .zimu-w.zimu-glossed .zimu-wt { display: inline-block; white-space: nowrap; }
 .zimu-row:has(.zimu-glossed) .zimu-p { vertical-align: top; }

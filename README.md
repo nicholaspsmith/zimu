@@ -114,6 +114,8 @@ use, so the video behind the subtitles is a gradient rather than a show.
 - **Speed** from 40% to 100% in 1% steps: drag the slider between − and +,
   click − / +, or hold them to run through the range (it speeds up the longer
   you hold), or use **[ ]** (1%) and **{ }** (5%). Pitch is kept, so voices sound natural, just slower.
+  While Zimu is on its slider is the speed: Jellyfin's own playback-speed
+  menu is overridden until Zimu is switched off.
 - **Colour by tone** (⚙): 1 blue, 2 green, 3 orange, 4 red, neutral grey.
 - **Look** (⚙): text and background opacity, size and height.
 - Hovering the subtitles doesn't pause (turn "Pause while the mouse is over

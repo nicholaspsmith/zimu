@@ -303,6 +303,10 @@ async function waitFor(fn, ms = 8000, step = 100) {
     await sleep(150);
     check('speed keys: 40–100% in 1% steps, capped at 100', Math.abs(r95[0] - 0.95) < 1e-9 && r95[1] === '95' && Math.abs(r40 - 0.4) < 1e-9 && Math.abs(r100 - 1) < 1e-9 && Number(await speedValue()) === 100,
       `${r95.join(' ')} ${r40} ${r100}`);
+    // Jellyfin's own speed menu can't override the slider while Zimu is on
+    await page.evaluate(() => { document.querySelector('video').playbackRate = 1.5; });
+    await sleep(200);
+    check('a rate set by Jellyfin’s own speed menu snaps back to Zimu’s slider', Math.abs((await rate()) - 1) < 1e-9, String(await rate()));
     await setSlider(100);
 
     // a slider between − and +, not a number box

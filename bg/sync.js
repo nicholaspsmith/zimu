@@ -7,6 +7,7 @@
 // The overlay hands over the Jellyfin login it borrows from the web client
 // (server, token, user); syncs then run from here: at start-up, every few
 // minutes, a few seconds after any local change, and on request.
+import '../src/lib/core.js';
 import '../src/lib/sync.js';
 
 const Z = globalThis.Zimu;
@@ -46,7 +47,7 @@ async function jellyfin(auth, method, body) {
 async function readLocal() {
   const everything = await store.get(null);
   const records = {};
-  for (const card of everything.cards || []) if (card && card.hanzi) records[`c:${card.hanzi}`] = card;
+  for (const card of everything.cards || []) if (card && card.hanzi) records[Z.cardKey(card)] = card;
   for (const [k, v] of Object.entries(everything)) if (k.startsWith('s:') && v) records[k] = v;
   return { records, deleted: everything.deleted || {}, cardsBefore: everything.cards || [] };
 }

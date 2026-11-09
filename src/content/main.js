@@ -1117,8 +1117,22 @@
     if (pause && S.video && !S.video.paused) S.video.pause();
 
     const body = h('div', { class: 'zimu-x-body' });
+    // Highlight part of the explanation and it can become a card of its own:
+    // the Chinese it names (or the line) on the front, the highlight on the back.
+    let noteText = '';
+    const noteBtn = h('button', { class: 'zimu-btn zimu-x-note', hidden: true, title: 'Make a flashcard from the highlighted text', onmousedown: (e) => e.preventDefault(), onclick: () => saveNote() }, '☆ Card from highlight');
+    const saveNote = async () => {
+      const text = noteText;
+      if (!text) return;
+      noteBtn.textContent = 'Saving…';
+      const head = (text.match(/[\u3400-\u9fff\u3005-\u3007]+/) || [])[0] || cue.zhText.replace(/\n/g, ' ');
+      const py = tokenize(head).filter((t) => t.han).map(tokenPinyin).join(' ');
+      await Z.Cards.add({ kind: 'note', hanzi: head, trad: '', pinyin: py, english: text, sentence: await sentenceFor(i), source: cueSource(i) });
+      noteBtn.textContent = '★ Saved as card';
+    };
     const foot = h('div', { class: 'zimu-x-foot' },
       h('button', { class: 'zimu-btn', title: 'Replay this line (S)', onclick: () => gotoLine('repeat') }, '↻ Replay line'),
+      noteBtn,
       h('span', { class: 'zimu-muted zimu-x-status' }));
     const pinyin = cue.zhText.split('\n').map((l) => tokenize(l).filter((t) => t.han).map(tokenPinyin).join(' ')).join(' / ');
     const panelEl = h('div', { class: 'zimu-explain', 'data-cue': i, 'data-key': key, onmousedown: (e) => e.stopPropagation() },
@@ -1126,6 +1140,13 @@
       h('div', { class: 'zimu-x-line' }, cue.zhText.replace(/\n/g, ' ')),
       h('div', { class: 'zimu-x-py' }, pinyin),
       body, foot);
+    panelEl.noteSel = () => {
+      const sel = document.getSelection();
+      const inBody = sel && !sel.isCollapsed && body.contains(sel.anchorNode) && body.contains(sel.focusNode);
+      const text = inBody ? sel.toString().replace(/\s+/g, ' ').trim() : '';
+      if (text !== noteText) { noteText = text; noteBtn.textContent = '☆ Card from highlight'; }
+      noteBtn.hidden = !text;
+    };
     explainPanel = panelEl;
     root.append(panelEl);
 
@@ -1153,6 +1174,8 @@
     panelEl.unsub = () => job.subs.delete(paint);
     paint();
   }
+
+  document.addEventListener('selectionchange', () => { if (explainPanel && explainPanel.noteSel) explainPanel.noteSel(); });
 
   // Called when the line on screen changes: drop a panel (or Show button) for
   // another line, and bring back the saved explanation of an already-explained
@@ -1547,7 +1570,7 @@
     if (s.speed !== clampSpeed(s.speed)) setLocal('speed', clampSpeed(s.speed)); // saved before the range changed
     applySettings();
   });
-  const takeCards = (cards) => { S.saved = new Set(cards.map((c) => c.hanzi)); markCards = cards; paintMarks(); };
+  const takeCards = (cards) => { S.saved = new Set(cards.filter((c) => c.kind !== 'note').map((c) => c.hanzi)); markCards = cards; paintMarks(); };
   Z.Cards.all().then(takeCards);
   Z.Cards.onChange((cards) => { takeCards(cards); render(true); });
   chrome.storage.onChanged.addListener((changes, area) => {

@@ -63,7 +63,10 @@ use, so the video behind the subtitles is a gradient rather than a show.
   comes back whenever you return to the line. **Hide** (or Esc) tucks it
   away; while that line is on screen a green speech bubble appears in Zimu's
   controls, left of the flashcards, and it or clicking the line brings the
-  panel back (from the save, no new charge).
+  panel back (from the save, no new charge). **Highlight** any part of the
+  explanation and *☆ Card from highlight* saves it as a flashcard of its own:
+  the Chinese it names (or the line) on the front, the highlighted text on the
+  back, with the line and a ▶ back to the moment.
   Scrolling it never changes Jellyfin's volume.
   Needs your Anthropic API key (🗂 → Settings); uses Claude Opus 5.5 at low
   effort, about 1¢ per new line, and each line is explained once.

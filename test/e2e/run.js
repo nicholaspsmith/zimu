@@ -583,6 +583,31 @@ async function waitFor(fn, ms = 8000, step = 100) {
       call.body.messages[0].content.includes('我觉得他还没睡着'), call ? call.body.messages[0].content.split('\n').slice(0, 4).join(' / ') : 'no request');
     await page.screenshot({ path: path.join(OUT, '6-explain.png') });
 
+    // highlight part of the explanation → a card of its own (a note: the
+    // Chinese it names on the front, the highlight on the back), not a word card
+    await page.evaluate(() => {
+      const row = [...document.querySelectorAll('.zimu-x-body > *')].find((r) => /erhua/.test(r.textContent));
+      const sel = document.getSelection();
+      sel.removeAllRanges();
+      const range = document.createRange();
+      range.selectNodeContents(row);
+      sel.addRange(range);
+    });
+    const noteBtn = await waitFor(() => page.evaluate(() => { const b = document.querySelector('.zimu-x-note'); return b && !b.hidden && b.getClientRects().length ? b.textContent : null; }), 2000);
+    await page.click('.zimu-x-note');
+    const note = await waitFor(() => cards.evaluate(async () => {
+      const all = await Z.Cards.all();
+      const n = all.find((c) => c.kind === 'note');
+      return n ? { id: n.id, hanzi: n.hanzi, pinyin: n.pinyin, english: n.english, src: !!n.source, words: all.filter((c) => c.kind !== 'note').map((c) => c.hanzi) } : null;
+    }), 4000);
+    const noteSaved = await page.evaluate(() => (document.querySelector('.zimu-x-note') || {}).textContent);
+    const underlined = await page.evaluate(() => [...document.querySelectorAll('.zimu-w.zimu-saved')].map((w) => w.textContent.replace(/\s+/g, '')));
+    check('highlighting part of the explanation saves it as its own card: 哪儿 on the front, the highlight on the back, no word card for 哪儿',
+      !!noteBtn && !!note && note.hanzi === '哪儿' && note.pinyin === 'nǎr' && /erhua form of 哪里/.test(note.english) && note.src && !note.words.includes('哪儿') &&
+      /Saved/.test(noteSaved || '') && !underlined.some((w) => w.includes('哪儿')), JSON.stringify({ noteBtn, note, noteSaved, underlined }));
+    if (note) await cards.evaluate((id) => Z.Cards.remove(id), note.id); // the rest of the run counts cards
+    await page.evaluate(() => document.getSelection().removeAllRanges());
+
     // it stays: mouse away, a word popup, playing within the line
     await page.mouse.move(10, 10);
     await sleep(1200);

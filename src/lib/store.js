@@ -67,9 +67,12 @@
       await area().set({ cards });
     },
     // One card per headword: saving an existing word returns the old card.
+    // Notes (highlights from an explanation) are their own cards: one per
+    // headword and highlight.
     async add(card) {
       const cards = await Cards.all();
-      const existing = cards.find((c) => c.hanzi === card.hanzi);
+      const note = card.kind === 'note';
+      const existing = cards.find((c) => (c.kind === 'note') === note && c.hanzi === card.hanzi && (!note || c.english === card.english));
       if (existing) return existing;
       const now = Date.now();
       const full = { id: newId(), created: now, box: 0, due: now, ...card, updated: now };
@@ -85,15 +88,16 @@
       await Cards.replaceAll(cards);
       return cards[i];
     },
+    // The word card for a headword; notes naming the same word stay.
     async removeByHanzi(hanzi) {
-      await Cards.replaceAll((await Cards.all()).filter((c) => c.hanzi !== hanzi));
+      await Cards.replaceAll((await Cards.all()).filter((c) => c.kind === 'note' || c.hanzi !== hanzi));
       await tombstone(`c:${hanzi}`);
     },
     async remove(id) {
       const cards = await Cards.all();
       const gone = cards.find((c) => c.id === id);
       await Cards.replaceAll(cards.filter((c) => c.id !== id));
-      if (gone) await tombstone(`c:${gone.hanzi}`);
+      if (gone) await tombstone(Z.cardKey(gone));
     },
     onChange(cb) {
       chrome.storage.onChanged.addListener((changes, name) => {
